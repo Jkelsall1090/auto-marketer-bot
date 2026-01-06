@@ -73,6 +73,33 @@ function ContentCard({ tactic, onCopy, onPost, onSkip }: {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Source Context - What we're responding to */}
+        {(tactic.source_context || tactic.source_url) && (
+          <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/30 p-3 space-y-2">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <MessageCircle className="h-3 w-3" />
+              Responding to:
+            </p>
+            {tactic.source_context && (
+              <p className="text-sm text-muted-foreground italic">
+                "{tactic.source_context}"
+              </p>
+            )}
+            {tactic.source_url && (
+              <a 
+                href={tactic.source_url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-xs text-primary hover:underline flex items-center gap-1"
+              >
+                <ExternalLink className="h-3 w-3" />
+                View original post
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* Generated response */}
         <div className="rounded-lg bg-secondary/50 p-4 text-sm leading-relaxed">
           {tactic.content}
         </div>
