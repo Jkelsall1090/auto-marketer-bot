@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { campaign_id, finding_id, platform: targetPlatform } = await req.json();
+    const { campaign_id, finding_id, platform: targetPlatform, quantity = 10 } = await req.json();
     
     if (!campaign_id) {
       return new Response(
@@ -21,7 +21,8 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Generating content for campaign ${campaign_id}, target platform: ${targetPlatform || 'all'}`);
+    const maxPosts = Math.min(Math.max(quantity, 1), 50); // Clamp between 1 and 50
+    console.log(`Generating ${maxPosts} posts for campaign ${campaign_id}, target platform: ${targetPlatform || 'all'}`);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -81,28 +82,28 @@ serve(async (req) => {
     const allFindings = findings ?? [];
     let selectedFindings = allFindings;
 
-    // If targeting a specific platform, generate multiple tweets/posts for that platform
+    // If targeting a specific platform, generate content for that platform using quantity
     if (targetPlatform && targetPlatform !== 'all') {
-      // For platform-specific generation, pick more findings and generate content for that platform
-      selectedFindings = allFindings.slice(0, 5);
+      selectedFindings = allFindings.slice(0, maxPosts);
       console.log(`Generating ${selectedFindings.length} ${targetPlatform} posts`);
     } else if (!finding_id) {
-      // Default behavior: pick diverse platforms
+      // Default behavior: pick diverse platforms up to quantity
       const perPlatformCount: Record<string, number> = {};
       const picked: any[] = [];
+      const maxPerPlatform = Math.ceil(maxPosts / 5); // Distribute across platforms
 
       for (const f of allFindings) {
         const p = inferPlatform(f.source_url);
         const count = perPlatformCount[p] ?? 0;
-        if (count >= 2) continue;
+        if (count >= maxPerPlatform) continue;
 
         picked.push(f);
         perPlatformCount[p] = count + 1;
 
-        if (picked.length >= 5) break;
+        if (picked.length >= maxPosts) break;
       }
 
-      selectedFindings = picked.length ? picked : allFindings.slice(0, 5);
+      selectedFindings = picked.length ? picked : allFindings.slice(0, maxPosts);
     }
 
     console.log(

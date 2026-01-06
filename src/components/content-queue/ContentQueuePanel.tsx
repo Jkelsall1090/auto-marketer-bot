@@ -151,10 +151,13 @@ const platformOptions = [
   { value: "tiktok", label: "TikTok", icon: "🎵" },
 ];
 
+const quantityOptions = [5, 10, 20, 30, 50];
+
 export function ContentQueuePanel() {
   const { data: campaigns, isLoading: campaignsLoading } = useCampaigns();
   const [selectedCampaign, setSelectedCampaign] = useState<string | null>(null);
   const [selectedPlatform, setSelectedPlatform] = useState<string>("all");
+  const [quantity, setQuantity] = useState<number>(10);
   
   const { data: tactics, isLoading: tacticsLoading, refetch } = useMarketingTactics(selectedCampaign || undefined);
   const markExecuted = useMarkTacticExecuted();
@@ -175,7 +178,11 @@ export function ContentQueuePanel() {
       toast.error("Please select a campaign first");
       return;
     }
-    await runAgent.mutateAsync({ campaignId: selectedCampaign, platform: selectedPlatform !== "all" ? selectedPlatform : undefined });
+    await runAgent.mutateAsync({ 
+      campaignId: selectedCampaign, 
+      platform: selectedPlatform !== "all" ? selectedPlatform : undefined,
+      quantity 
+    });
     refetch();
   };
 
@@ -213,7 +220,18 @@ export function ContentQueuePanel() {
               </option>
             ))}
           </select>
-          <Button 
+          <select
+            value={quantity}
+            onChange={(e) => setQuantity(Number(e.target.value))}
+            className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm w-20"
+          >
+            {quantityOptions.map((q) => (
+              <option key={q} value={q}>
+                {q}
+              </option>
+            ))}
+          </select>
+          <Button
             onClick={handleRunAgent} 
             disabled={runAgent.isPending || !selectedCampaign}
             variant="glow"
