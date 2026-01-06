@@ -48,7 +48,7 @@ serve(async (req) => {
       .eq('campaign_id', campaign_id)
       .eq('processed', false)
       .order('relevance_score', { ascending: false })
-      .limit(5);
+      .limit(25);
 
     if (finding_id) {
       findingsQuery = supabase
@@ -66,18 +66,46 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Generating content for ${findings.length} findings`);
+    const inferPlatform = (url?: string | null) => {
+      const u = (url ?? "").toLowerCase();
+      if (u.includes("reddit")) return "reddit";
+      if (u.includes("facebook")) return "facebook";
+      if (u.includes("twitter") || u.includes("x.com")) return "twitter";
+      if (u.includes("tiktok")) return "tiktok";
+      if (u.includes("instagram")) return "instagram";
+      return "general";
+    };
+
+    const allFindings = findings ?? [];
+    let selectedFindings = allFindings;
+
+    if (!finding_id) {
+      const perPlatformCount: Record<string, number> = {};
+      const picked: any[] = [];
+
+      for (const f of allFindings) {
+        const p = inferPlatform(f.source_url);
+        const count = perPlatformCount[p] ?? 0;
+        if (count >= 2) continue;
+
+        picked.push(f);
+        perPlatformCount[p] = count + 1;
+
+        if (picked.length >= 5) break;
+      }
+
+      selectedFindings = picked.length ? picked : allFindings.slice(0, 5);
+    }
+
+    console.log(
+      `Generating content for ${selectedFindings.length} findings (from ${allFindings.length} opportunities)`
+    );
 
     const tactics: any[] = [];
 
-    for (const finding of findings) {
+    for (const finding of selectedFindings) {
       // Determine platform from URL
-      let platform = 'general';
-      if (finding.source_url?.includes('reddit')) platform = 'reddit';
-      else if (finding.source_url?.includes('facebook')) platform = 'facebook';
-      else if (finding.source_url?.includes('twitter') || finding.source_url?.includes('x.com')) platform = 'twitter';
-      else if (finding.source_url?.includes('tiktok')) platform = 'tiktok';
-      else if (finding.source_url?.includes('instagram')) platform = 'instagram';
+      let platform = inferPlatform(finding.source_url);
 
       // Generate content using Lovable AI
       if (lovableApiKey) {

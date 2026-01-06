@@ -59,24 +59,26 @@ serve(async (req) => {
     // Research queries across multiple platforms
     const searchQueries = [
       // Reddit
-      `${campaign.product} site:reddit.com`,
-      `TSA wait times help site:reddit.com`,
-      `airport app recommendations site:reddit.com`,
-      // Facebook Groups  
-      `airport travel tips site:facebook.com`,
-      `TSA wait times group site:facebook.com`,
+      `TSA wait times app site:reddit.com`,
+      // Facebook
+      `TSA wait times app site:facebook.com`,
       // Twitter/X
-      `airport wait times site:twitter.com OR site:x.com`,
+      `TSA wait times app site:twitter.com OR site:x.com`,
       // TikTok
-      `airport hacks site:tiktok.com`,
-      // General travel forums
-      `best airport apps ${new Date().getFullYear()}`,
-      `flight delay notifications app`,
+      `TSA wait times site:tiktok.com`,
+      // Instagram
+      `TSA wait times site:instagram.com`,
+      // General
+      `best airport apps real-time wait times ${new Date().getFullYear()}`,
+      // Product-specific
+      `${campaign.product} TSA wait times`,
     ];
+
+    const maxQueries = 6;
 
     // Use Firecrawl search if available
     if (firecrawlKey) {
-      for (const query of searchQueries.slice(0, 3)) {
+      for (const query of searchQueries.slice(0, maxQueries)) {
         try {
           console.log('Searching:', query);
           
@@ -88,7 +90,7 @@ serve(async (req) => {
             },
             body: JSON.stringify({
               query,
-              limit: 5,
+              limit: 4,
               tbs: 'qdr:w', // Last week
             }),
           });
