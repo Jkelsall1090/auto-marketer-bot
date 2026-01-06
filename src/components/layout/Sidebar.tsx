@@ -6,7 +6,8 @@ import {
   Settings, 
   BarChart3,
   Zap,
-  Target
+  Target,
+  ListTodo
 } from "lucide-react";
 
 interface SidebarProps {
@@ -17,6 +18,7 @@ interface SidebarProps {
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "campaigns", label: "Campaigns", icon: Rocket },
+  { id: "content-queue", label: "Content Queue", icon: ListTodo },
   { id: "activity", label: "Activity Log", icon: Activity },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "settings", label: "Settings", icon: Settings },
