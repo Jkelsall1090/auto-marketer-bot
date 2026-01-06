@@ -116,3 +116,25 @@ export function useDeleteTactic() {
     },
   });
 }
+
+export type PostedAction = Tables<"actions_taken">;
+
+export function usePostedActions(campaignId?: string) {
+  return useQuery({
+    queryKey: ["posted-actions", campaignId],
+    queryFn: async () => {
+      let query = supabase
+        .from("actions_taken")
+        .select("*")
+        .order("executed_at", { ascending: false });
+
+      if (campaignId) {
+        query = query.eq("campaign_id", campaignId);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data as PostedAction[];
+    },
+  });
+}

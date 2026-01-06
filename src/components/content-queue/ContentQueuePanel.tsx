@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useMarketingTactics, useMarkTacticExecuted, useDeleteTactic, type MarketingTactic } from "@/hooks/useContentQueue";
+import { useMarketingTactics, useMarkTacticExecuted, useDeleteTactic, usePostedActions, type MarketingTactic } from "@/hooks/useContentQueue";
 import { useCampaigns, useRunAgent } from "@/hooks/useCampaigns";
 import { 
   Copy, 
@@ -160,6 +160,7 @@ export function ContentQueuePanel() {
   const [quantity, setQuantity] = useState<number>(10);
   
   const { data: tactics, isLoading: tacticsLoading, refetch } = useMarketingTactics(selectedCampaign || undefined);
+  const { data: postedActionsData } = usePostedActions(selectedCampaign || undefined);
   const markExecuted = useMarkTacticExecuted();
   const deleteTactic = useDeleteTactic();
   const runAgent = useRunAgent();
@@ -254,7 +255,7 @@ export function ContentQueuePanel() {
           </TabsTrigger>
           <TabsTrigger value="posted" className="gap-2">
             <Check className="h-4 w-4" />
-            Posted ({postedTactics.length})
+            Posted ({postedActionsData?.filter(a => selectedPlatform === "all" || a.platform.toLowerCase() === selectedPlatform).length || 0})
           </TabsTrigger>
         </TabsList>
 
@@ -297,7 +298,7 @@ export function ContentQueuePanel() {
         </TabsContent>
 
         <TabsContent value="posted" className="mt-6">
-          {postedTactics.length === 0 ? (
+          {(!postedActionsData || postedActionsData.length === 0) ? (
             <Card className="border-dashed">
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <Check className="h-12 w-12 text-muted-foreground/50 mb-4" />
@@ -307,22 +308,42 @@ export function ContentQueuePanel() {
             </Card>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-              {postedTactics.map((tactic) => (
-                <Card key={tactic.id} className="border-border bg-card/30 opacity-75">
+              {postedActionsData
+                .filter(action => selectedPlatform === "all" || action.platform.toLowerCase() === selectedPlatform)
+                .map((action) => (
+                <Card key={action.id} className="border-border bg-card/50">
                   <CardHeader className="pb-3">
-                    <div className="flex items-center gap-2">
-                      <span>{platformIcons[tactic.platform] || "💬"}</span>
-                      <Badge variant="outline" className={platformColors[tactic.platform]}>
-                        {tactic.platform}
-                      </Badge>
-                      <Badge variant="secondary" className="bg-success/10 text-success">
-                        <Check className="h-3 w-3 mr-1" /> Posted
-                      </Badge>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span>{platformIcons[action.platform] || "💬"}</span>
+                        <Badge variant="outline" className={platformColors[action.platform]}>
+                          {action.platform}
+                        </Badge>
+                        <Badge variant="secondary" className="bg-success/10 text-success">
+                          <Check className="h-3 w-3 mr-1" /> Posted
+                        </Badge>
+                      </div>
+                      {action.url && (
+                        <a
+                          href={action.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline flex items-center gap-1 text-sm"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          View Tweet
+                        </a>
+                      )}
                     </div>
+                    {action.executed_at && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Posted {new Date(action.executed_at).toLocaleString()}
+                      </p>
+                    )}
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-muted-foreground line-clamp-3">
-                      {tactic.content}
+                    <p className="text-sm text-muted-foreground">
+                      {action.content}
                     </p>
                   </CardContent>
                 </Card>
