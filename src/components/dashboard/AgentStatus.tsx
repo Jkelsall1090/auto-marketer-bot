@@ -40,7 +40,7 @@ export function AgentStatus({
 
       if (error) throw error;
 
-      toast.success(`Agent run complete! Posted ${data?.posted || 0} tweets.`);
+      toast.success(`Agent run complete! Posted ${data?.total_tweets_posted || 0} tweets.`);
       console.log('Agent run result:', data);
     } catch (err: any) {
       console.error('Agent run failed:', err);
