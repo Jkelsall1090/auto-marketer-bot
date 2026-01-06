@@ -142,24 +142,40 @@ function ContentCard({ tactic, onCopy, onPost, onSkip }: {
   );
 }
 
+const platformOptions = [
+  { value: "all", label: "All Platforms", icon: "🌐" },
+  { value: "twitter", label: "Twitter", icon: "🐦" },
+  { value: "reddit", label: "Reddit", icon: "🔴" },
+  { value: "facebook", label: "Facebook", icon: "📘" },
+  { value: "instagram", label: "Instagram", icon: "📸" },
+  { value: "tiktok", label: "TikTok", icon: "🎵" },
+];
+
 export function ContentQueuePanel() {
   const { data: campaigns, isLoading: campaignsLoading } = useCampaigns();
   const [selectedCampaign, setSelectedCampaign] = useState<string | null>(null);
+  const [selectedPlatform, setSelectedPlatform] = useState<string>("all");
   
   const { data: tactics, isLoading: tacticsLoading, refetch } = useMarketingTactics(selectedCampaign || undefined);
   const markExecuted = useMarkTacticExecuted();
   const deleteTactic = useDeleteTactic();
   const runAgent = useRunAgent();
 
-  const pendingTactics = tactics?.filter(t => !t.executed) || [];
-  const postedTactics = tactics?.filter(t => t.executed) || [];
+  // Filter tactics by platform
+  const filterByPlatform = (items: typeof tactics) => {
+    if (selectedPlatform === "all" || !items) return items;
+    return items.filter(t => t.platform.toLowerCase() === selectedPlatform);
+  };
+
+  const pendingTactics = filterByPlatform(tactics?.filter(t => !t.executed)) || [];
+  const postedTactics = filterByPlatform(tactics?.filter(t => t.executed)) || [];
 
   const handleRunAgent = async () => {
     if (!selectedCampaign) {
       toast.error("Please select a campaign first");
       return;
     }
-    await runAgent.mutateAsync({ campaignId: selectedCampaign });
+    await runAgent.mutateAsync({ campaignId: selectedCampaign, platform: selectedPlatform !== "all" ? selectedPlatform : undefined });
     refetch();
   };
 
@@ -186,6 +202,17 @@ export function ContentQueuePanel() {
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
+          <select
+            value={selectedPlatform}
+            onChange={(e) => setSelectedPlatform(e.target.value)}
+            className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm"
+          >
+            {platformOptions.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.icon} {p.label}
+              </option>
+            ))}
+          </select>
           <Button 
             onClick={handleRunAgent} 
             disabled={runAgent.isPending || !selectedCampaign}
@@ -196,7 +223,7 @@ export function ContentQueuePanel() {
             ) : (
               <Sparkles className="h-4 w-4 mr-2" />
             )}
-            Generate Content
+            Generate {selectedPlatform !== "all" ? platformOptions.find(p => p.value === selectedPlatform)?.label : ""} Content
           </Button>
         </div>
       </div>
