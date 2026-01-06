@@ -85,8 +85,17 @@ function extractTweetId(url: string | null | undefined): string | null {
   // Match patterns like:
   // https://twitter.com/user/status/1234567890
   // https://x.com/user/status/1234567890
-  const match = url.match(/(?:twitter\.com|x\.com)\/\w+\/status\/(\d+)/);
-  return match ? match[1] : null;
+  // https://x.com/i/web/status/1234567890
+  const patterns = [
+    /(?:twitter\.com|x\.com)\/\w+\/status\/(\d+)/,
+    /(?:twitter\.com|x\.com)\/i\/web\/status\/(\d+)/,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
 }
 
 serve(async (req) => {
