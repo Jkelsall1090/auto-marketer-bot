@@ -123,31 +123,50 @@ serve(async (req) => {
         try {
           const appUrl = 'https://airportbuddy.app/';
           
-          const systemPrompt = `You are a helpful marketing assistant for ${campaign.name}. 
+          const platformGuidelines: Record<string, string> = {
+            twitter: `CRITICAL: Tweet must be UNDER 250 characters (leave room for URL). 
+- Be concise and punchy
+- Include a clear CTA with the URL: ${appUrl}
+- Use 1-2 relevant emojis max
+- No hashtags cluttering the message`,
+            reddit: `Write a helpful, conversational Reddit comment (300-500 chars).
+- Address the specific question/problem
+- Provide genuine value first
+- Naturally mention AirportBuddy with URL: ${appUrl}
+- Don't be salesy`,
+            default: `Write a helpful, natural response.
+- Provide value first
+- Include CTA with URL: ${appUrl}
+- Match the platform tone`
+          };
+          
+          const guidelines = platformGuidelines[platform] || platformGuidelines.default;
+          
+          const systemPrompt = `You are a helpful marketing assistant for AirportBuddy - a free app that shows real-time TSA wait times at US airports.
+
 Product: ${campaign.product}
 App URL: ${appUrl}
-Goals: ${JSON.stringify(campaign.goals)}
 
-Generate authentic, helpful content that naturally mentions the product value. 
-- Never be pushy or salesy
-- Provide genuine value first
-- Keep it conversational and natural
-- Match the platform's tone and style
-- Include the URL as plain text (${appUrl}) - DO NOT use markdown links like [text](url)`;
+RULES:
+- ALWAYS include the URL (${appUrl}) in your response as plain text
+- Never use markdown links like [text](url)
+- Be genuinely helpful, not pushy
+- ${guidelines}`;
 
           const userPrompt = `Generate a ${platform} response for this opportunity:
 
 Title: ${finding.title}
 Context: ${finding.content}
-URL: ${finding.source_url}
+${finding.source_url ? `Source: ${finding.source_url}` : ''}
 
-Create a helpful, authentic ${platform === 'reddit' ? 'comment' : platform === 'twitter' ? 'tweet' : 'post'} that:
-1. Addresses the user's actual question/pain point
-2. Provides genuine value
-3. Naturally mentions AirportBuddy with the plain URL ${appUrl} (not as a markdown link)
-4. Fits the ${platform} platform style
+Write a ${platform === 'twitter' ? 'tweet (MAX 250 characters including URL!)' : platform === 'reddit' ? 'Reddit comment' : 'post'} that:
+1. Addresses the user's actual concern
+2. Mentions how AirportBuddy helps
+3. MUST include ${appUrl} as plain text
 
-Return ONLY the content text, no explanations or markdown formatting.`;
+${platform === 'twitter' ? 'IMPORTANT: Keep it SHORT - under 250 chars total!' : ''}
+
+Return ONLY the final content text, nothing else.`;
 
           const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
             method: 'POST',
@@ -190,15 +209,14 @@ Return ONLY the content text, no explanations or markdown formatting.`;
         } catch (err) {
           console.error('Content generation error:', err);
         }
-      } else {
-        // Fallback content generation
+        // Fallback content generation (when no AI key)
         const appUrl = 'https://airportbuddy.app/';
         const templates: Record<string, string> = {
-          reddit: `I've been using AirportBuddy for exactly this! It shows real-time TSA wait times so you know exactly when to head to the airport. Saved me from missing a flight at LAX last month when wait times spiked unexpectedly. Check it out: ${appUrl}`,
-          facebook: `Great question! For real-time TSA wait times, I recommend checking out AirportBuddy (${appUrl}) - it's a free web app that shows current wait times at major US airports. Makes travel planning so much easier! 🛫`,
-          twitter: `Pro tip for frequent flyers: AirportBuddy shows real-time TSA wait times so you never have to guess. Game changer for stress-free travel ✈️ ${appUrl} #TravelTips #AirportHacks`,
-          tiktok: `POV: You stop stressing about TSA lines because AirportBuddy tells you exactly how long the wait is before you leave home 🎯✈️ ${appUrl} #traveltok #airporthacks #tsawait`,
-          general: `If you're looking for real-time TSA wait times, AirportBuddy is a great free tool. It covers major US airports and helps you plan when to arrive: ${appUrl}`,
+          reddit: `I've been using AirportBuddy for exactly this! It shows real-time TSA wait times so you know exactly when to head to the airport. Saved me from missing a flight last month. Check it out: ${appUrl}`,
+          facebook: `Great question! For real-time TSA wait times, I recommend AirportBuddy (${appUrl}) - it's a free web app that shows current wait times at major US airports. Makes travel planning so much easier! 🛫`,
+          twitter: `Skip the TSA guessing game ✈️ AirportBuddy shows real-time wait times so you know exactly when to arrive. ${appUrl}`,
+          tiktok: `POV: You stop stressing about TSA lines because AirportBuddy tells you the wait before you leave 🎯 ${appUrl} #traveltok`,
+          general: `For real-time TSA wait times, AirportBuddy is a great free tool covering major US airports: ${appUrl}`,
         };
 
         tactics.push({
