@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.agent-run]
 verify_jwt = false
+
+[functions.post-twitter]
+verify_jwt = false
