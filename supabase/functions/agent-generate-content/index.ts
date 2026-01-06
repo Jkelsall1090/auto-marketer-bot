@@ -94,7 +94,7 @@ Generate authentic, helpful content that naturally mentions the product value.
 - Provide genuine value first
 - Keep it conversational and natural
 - Match the platform's tone and style
-- Always include the app URL (${appUrl}) naturally in the content`;
+- Include the URL as plain text (${appUrl}) - DO NOT use markdown links like [text](url)`;
 
           const userPrompt = `Generate a ${platform} response for this opportunity:
 
@@ -105,10 +105,10 @@ URL: ${finding.source_url}
 Create a helpful, authentic ${platform === 'reddit' ? 'comment' : platform === 'twitter' ? 'tweet' : 'post'} that:
 1. Addresses the user's actual question/pain point
 2. Provides genuine value
-3. Naturally mentions AirportBuddy (${appUrl}) as a solution (not as an ad)
+3. Naturally mentions AirportBuddy with the plain URL ${appUrl} (not as a markdown link)
 4. Fits the ${platform} platform style
 
-Return ONLY the content text, no explanations.`;
+Return ONLY the content text, no explanations or markdown formatting.`;
 
           const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
             method: 'POST',
