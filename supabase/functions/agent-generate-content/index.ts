@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { campaign_id, finding_id } = await req.json();
+    const { campaign_id, finding_id, platform: targetPlatform } = await req.json();
     
     if (!campaign_id) {
       return new Response(
@@ -20,6 +20,8 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    console.log(`Generating content for campaign ${campaign_id}, target platform: ${targetPlatform || 'all'}`);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -79,7 +81,13 @@ serve(async (req) => {
     const allFindings = findings ?? [];
     let selectedFindings = allFindings;
 
-    if (!finding_id) {
+    // If targeting a specific platform, generate multiple tweets/posts for that platform
+    if (targetPlatform && targetPlatform !== 'all') {
+      // For platform-specific generation, pick more findings and generate content for that platform
+      selectedFindings = allFindings.slice(0, 5);
+      console.log(`Generating ${selectedFindings.length} ${targetPlatform} posts`);
+    } else if (!finding_id) {
+      // Default behavior: pick diverse platforms
       const perPlatformCount: Record<string, number> = {};
       const picked: any[] = [];
 
@@ -104,8 +112,10 @@ serve(async (req) => {
     const tactics: any[] = [];
 
     for (const finding of selectedFindings) {
-      // Determine platform from URL
-      let platform = inferPlatform(finding.source_url);
+      // Determine platform - use target platform if specified, otherwise infer from URL
+      let platform = targetPlatform && targetPlatform !== 'all' 
+        ? targetPlatform 
+        : inferPlatform(finding.source_url);
 
       // Generate content using Lovable AI
       if (lovableApiKey) {
