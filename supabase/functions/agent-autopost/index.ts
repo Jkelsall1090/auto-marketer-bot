@@ -47,9 +47,17 @@ function generateOAuthHeader(method: string, url: string): string {
     .join(", ");
 }
 
-async function sendTweet(tweetText: string): Promise<any> {
+async function sendTweet(tweetText: string, replyToTweetId?: string): Promise<any> {
   const url = "https://api.x.com/2/tweets";
   const oauthHeader = generateOAuthHeader("POST", url);
+
+  const body: any = { text: tweetText };
+  
+  // If replying to a tweet, add the reply parameter
+  if (replyToTweetId) {
+    body.reply = { in_reply_to_tweet_id: replyToTweetId };
+    console.log(`Posting as reply to tweet: ${replyToTweetId}`);
+  }
 
   const response = await fetch(url, {
     method: "POST",
@@ -57,7 +65,7 @@ async function sendTweet(tweetText: string): Promise<any> {
       Authorization: oauthHeader,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ text: tweetText }),
+    body: JSON.stringify(body),
   });
 
   const responseText = await response.text();
@@ -68,6 +76,17 @@ async function sendTweet(tweetText: string): Promise<any> {
   }
 
   return JSON.parse(responseText);
+}
+
+// Extract tweet ID from Twitter/X URLs
+function extractTweetId(url: string | null | undefined): string | null {
+  if (!url) return null;
+  
+  // Match patterns like:
+  // https://twitter.com/user/status/1234567890
+  // https://x.com/user/status/1234567890
+  const match = url.match(/(?:twitter\.com|x\.com)\/\w+\/status\/(\d+)/);
+  return match ? match[1] : null;
 }
 
 serve(async (req) => {
@@ -213,9 +232,12 @@ serve(async (req) => {
         }
 
         try {
-          // Post to Twitter
-          const twitterResult = await sendTweet(tweetContent);
-          console.log(`Posted tweet: ${twitterResult.data?.id}`);
+          // Check if this is a reply to a tweet
+          const replyToTweetId = extractTweetId(tactic.source_url);
+          
+          // Post to Twitter (as reply if we have a tweet ID)
+          const twitterResult = await sendTweet(tweetContent, replyToTweetId || undefined);
+          console.log(`Posted tweet: ${twitterResult.data?.id}${replyToTweetId ? ` (reply to ${replyToTweetId})` : ''}`);
 
           // Mark as executed
           await supabase
@@ -229,7 +251,7 @@ serve(async (req) => {
             .insert({
               campaign_id: campaign.id,
               platform: 'twitter',
-              action_type: 'tweet',
+              action_type: replyToTweetId ? 'reply' : 'tweet',
               content: tweetContent,
               url: `https://twitter.com/i/web/status/${twitterResult.data?.id}`,
               status: 'completed',
