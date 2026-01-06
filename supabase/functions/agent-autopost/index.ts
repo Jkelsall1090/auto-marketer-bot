@@ -101,13 +101,13 @@ serve(async (req) => {
   try {
     // Parse optional parameters
     let campaignId: string | null = null;
-    let postsPerRun = 3; // Default: post 3 tweets per run
+    let postsPerRun = 5; // Default: post 5 tweets per run
     let dryRun = false;
 
     try {
       const body = await req.json();
       campaignId = body.campaign_id || null;
-      postsPerRun = body.posts_per_run || 3;
+      postsPerRun = body.posts_per_run || 5;
       dryRun = body.dry_run || false;
     } catch {
       // No body provided, use defaults
