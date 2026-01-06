@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { 
   Cpu, 
@@ -6,9 +7,12 @@ import {
   Clock, 
   CheckCircle2,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface AgentStatusProps {
   phase: string;
@@ -25,13 +29,43 @@ export function AgentStatus({
   nextRun,
   opportunitiesQueued 
 }: AgentStatusProps) {
+  const [isTriggering, setIsTriggering] = useState(false);
+
+  const handleForceRun = async () => {
+    setIsTriggering(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('agent-autopost', {
+        body: { dry_run: false }
+      });
+
+      if (error) throw error;
+
+      toast.success(`Agent run complete! Posted ${data?.posted || 0} tweets.`);
+      console.log('Agent run result:', data);
+    } catch (err: any) {
+      console.error('Agent run failed:', err);
+      toast.error(`Agent run failed: ${err.message}`);
+    } finally {
+      setIsTriggering(false);
+    }
+  };
   return (
     <div className="rounded-xl border border-border bg-gradient-card p-6">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-foreground">Agent Status</h3>
-        <Button variant="outline" size="sm" className="gap-2">
-          <RefreshCw className="h-4 w-4" />
-          Force Run
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="gap-2"
+          onClick={handleForceRun}
+          disabled={isTriggering}
+        >
+          {isTriggering ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+          {isTriggering ? "Running..." : "Force Run"}
         </Button>
       </div>
 
