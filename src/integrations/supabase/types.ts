@@ -210,6 +210,9 @@ export type Database = {
           id: string
           platform: string
           priority: number | null
+          source_context: string | null
+          source_finding_id: string | null
+          source_url: string | null
           tactic_type: string
           target_audience: string | null
         }
@@ -222,6 +225,9 @@ export type Database = {
           id?: string
           platform: string
           priority?: number | null
+          source_context?: string | null
+          source_finding_id?: string | null
+          source_url?: string | null
           tactic_type: string
           target_audience?: string | null
         }
@@ -234,6 +240,9 @@ export type Database = {
           id?: string
           platform?: string
           priority?: number | null
+          source_context?: string | null
+          source_finding_id?: string | null
+          source_url?: string | null
           tactic_type?: string
           target_audience?: string | null
         }
@@ -243,6 +252,13 @@ export type Database = {
             columns: ["campaign_id"]
             isOneToOne: false
             referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketing_tactics_source_finding_id_fkey"
+            columns: ["source_finding_id"]
+            isOneToOne: false
+            referencedRelation: "research_findings"
             referencedColumns: ["id"]
           },
         ]

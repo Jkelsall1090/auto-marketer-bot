@@ -139,6 +139,9 @@ Return ONLY the content text, no explanations.`;
                 estimated_impact: finding.relevance_score >= 8 ? 'high' : 'medium',
                 priority: finding.relevance_score,
                 executed: false,
+                source_finding_id: finding.id,
+                source_url: finding.source_url,
+                source_context: finding.content,
               });
             }
           } else {
@@ -168,6 +171,9 @@ Return ONLY the content text, no explanations.`;
           estimated_impact: 'medium',
           priority: finding.relevance_score,
           executed: false,
+          source_finding_id: finding.id,
+          source_url: finding.source_url,
+          source_context: finding.content,
         });
       }
 

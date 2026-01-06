@@ -56,13 +56,22 @@ serve(async (req) => {
     const findings: any[] = [];
     const channels = campaign.channels as string[] || [];
     
-    // Research queries based on product
+    // Research queries across multiple platforms
     const searchQueries = [
+      // Reddit
       `${campaign.product} site:reddit.com`,
-      `TSA wait times discussion site:reddit.com`,
-      `airport travel tips ${new Date().getFullYear()}`,
-      `flight delay app recommendations`,
-      `best airport apps travelers`,
+      `TSA wait times help site:reddit.com`,
+      `airport app recommendations site:reddit.com`,
+      // Facebook Groups  
+      `airport travel tips site:facebook.com`,
+      `TSA wait times group site:facebook.com`,
+      // Twitter/X
+      `airport wait times site:twitter.com OR site:x.com`,
+      // TikTok
+      `airport hacks site:tiktok.com`,
+      // General travel forums
+      `best airport apps ${new Date().getFullYear()}`,
+      `flight delay notifications app`,
     ];
 
     // Use Firecrawl search if available
@@ -111,26 +120,38 @@ serve(async (req) => {
         {
           title: "r/travel - Best apps for frequent flyers?",
           source_url: "https://reddit.com/r/travel/comments/example1",
-          content: "Looking for apps that help with airport navigation and TSA wait times. Any recommendations?",
+          content: "Looking for apps that help with airport navigation and TSA wait times. Any recommendations? I fly weekly for work and the uncertainty is killing me.",
           relevance_score: 9,
         },
         {
           title: "r/flights - Long TSA lines frustration thread",
           source_url: "https://reddit.com/r/flights/comments/example2", 
-          content: "Just spent 2 hours in TSA line at JFK. There has to be a better way to know wait times!",
+          content: "Just spent 2 hours in TSA line at JFK. There has to be a better way to know wait times! Anyone have tips?",
           relevance_score: 10,
         },
         {
-          title: "Facebook Travel Group - Airport hacks 2024",
-          source_url: "https://facebook.com/groups/travelers/posts/example3",
-          content: "Share your best airport hacks! I'm looking for ways to speed through security.",
+          title: "Facebook Travel Hackers - Airport tips thread",
+          source_url: "https://facebook.com/groups/travelhackers/posts/example3",
+          content: "Share your best airport hacks! I'm looking for ways to speed through security. Are there any apps that show real wait times?",
           relevance_score: 8,
         },
         {
-          title: "TikTok trending - #AirportHacks",
-          source_url: "https://tiktok.com/tag/airporthacks",
-          content: "Trending topic with 2.3M views - travelers sharing tips and asking for app recommendations.",
+          title: "Twitter - @FrequentFlyer asking about delays",
+          source_url: "https://twitter.com/FrequentFlyer/status/example4",
+          content: "Does anyone know an app that predicts TSA wait times? Tired of guessing when to leave for the airport.",
           relevance_score: 8,
+        },
+        {
+          title: "TikTok - #AirportHacks viral comment section",
+          source_url: "https://tiktok.com/@traveler/video/example5",
+          content: "Video about airport tips has 500+ comments asking for TSA wait time solutions. Perfect opportunity to mention the app.",
+          relevance_score: 9,
+        },
+        {
+          title: "Instagram - Travel influencer Q&A",
+          source_url: "https://instagram.com/p/example6",
+          content: "Influencer asking followers: What apps do you use for stress-free airport experience? 1.2k comments.",
+          relevance_score: 7,
         },
       ];
 
