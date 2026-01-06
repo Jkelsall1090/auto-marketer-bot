@@ -79,11 +79,32 @@ serve(async (req) => {
       return "general";
     };
 
+    // Check if a URL is a valid tweet status URL (can be replied to)
+    const isValidTweetUrl = (url?: string | null) => {
+      if (!url) return false;
+      const u = url.toLowerCase();
+      return (u.includes("twitter.com") || u.includes("x.com")) && u.includes("/status/");
+    };
+
     const allFindings = findings ?? [];
     let selectedFindings = allFindings;
 
-    // If targeting a specific platform, generate content for that platform using quantity
-    if (targetPlatform && targetPlatform !== 'all') {
+    // If targeting Twitter specifically, ONLY use findings with valid tweet status URLs
+    if (targetPlatform === 'twitter') {
+      const twitterFindings = allFindings.filter(f => isValidTweetUrl(f.source_url));
+      
+      if (twitterFindings.length === 0) {
+        console.log('No findings with valid tweet URLs to reply to');
+        return new Response(
+          JSON.stringify({ success: false, error: 'No valid tweet URLs found in research findings. Run research to find tweets first.' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      selectedFindings = twitterFindings.slice(0, maxPosts);
+      console.log(`Generating ${selectedFindings.length} ${targetPlatform} replies (from ${twitterFindings.length} tweet opportunities)`);
+    } else if (targetPlatform && targetPlatform !== 'all') {
+      // Other specific platform
       selectedFindings = allFindings.slice(0, maxPosts);
       console.log(`Generating ${selectedFindings.length} ${targetPlatform} posts`);
     } else if (!finding_id) {
