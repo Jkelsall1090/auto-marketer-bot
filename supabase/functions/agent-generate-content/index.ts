@@ -82,15 +82,19 @@ serve(async (req) => {
       // Generate content using Lovable AI
       if (lovableApiKey) {
         try {
+          const appUrl = 'https://airportbuddy.app/';
+          
           const systemPrompt = `You are a helpful marketing assistant for ${campaign.name}. 
 Product: ${campaign.product}
+App URL: ${appUrl}
 Goals: ${JSON.stringify(campaign.goals)}
 
 Generate authentic, helpful content that naturally mentions the product value. 
 - Never be pushy or salesy
 - Provide genuine value first
 - Keep it conversational and natural
-- Match the platform's tone and style`;
+- Match the platform's tone and style
+- Always include the app URL (${appUrl}) naturally in the content`;
 
           const userPrompt = `Generate a ${platform} response for this opportunity:
 
@@ -101,7 +105,7 @@ URL: ${finding.source_url}
 Create a helpful, authentic ${platform === 'reddit' ? 'comment' : platform === 'twitter' ? 'tweet' : 'post'} that:
 1. Addresses the user's actual question/pain point
 2. Provides genuine value
-3. Naturally mentions the app as a solution (not as an ad)
+3. Naturally mentions AirportBuddy (${appUrl}) as a solution (not as an ad)
 4. Fits the ${platform} platform style
 
 Return ONLY the content text, no explanations.`;
@@ -146,12 +150,13 @@ Return ONLY the content text, no explanations.`;
         }
       } else {
         // Fallback content generation
+        const appUrl = 'https://airportbuddy.app/';
         const templates: Record<string, string> = {
-          reddit: `I've been using AirportBuddy for exactly this! It shows real-time TSA wait times so you know exactly when to head to the airport. Saved me from missing a flight at LAX last month when wait times spiked unexpectedly. It's a free web app at [link].`,
-          facebook: `Great question! For real-time TSA wait times, I recommend checking out AirportBuddy - it's a free web app that shows current wait times at major US airports. Makes travel planning so much easier! 🛫`,
-          twitter: `Pro tip for frequent flyers: AirportBuddy shows real-time TSA wait times so you never have to guess. Game changer for stress-free travel ✈️ #TravelTips #AirportHacks`,
-          tiktok: `POV: You stop stressing about TSA lines because AirportBuddy tells you exactly how long the wait is before you leave home 🎯✈️ #traveltok #airporthacks #tsawait`,
-          general: `If you're looking for real-time TSA wait times, AirportBuddy is a great free tool. It covers major US airports and helps you plan when to arrive. Has been really helpful for my travels!`,
+          reddit: `I've been using AirportBuddy for exactly this! It shows real-time TSA wait times so you know exactly when to head to the airport. Saved me from missing a flight at LAX last month when wait times spiked unexpectedly. Check it out: ${appUrl}`,
+          facebook: `Great question! For real-time TSA wait times, I recommend checking out AirportBuddy (${appUrl}) - it's a free web app that shows current wait times at major US airports. Makes travel planning so much easier! 🛫`,
+          twitter: `Pro tip for frequent flyers: AirportBuddy shows real-time TSA wait times so you never have to guess. Game changer for stress-free travel ✈️ ${appUrl} #TravelTips #AirportHacks`,
+          tiktok: `POV: You stop stressing about TSA lines because AirportBuddy tells you exactly how long the wait is before you leave home 🎯✈️ ${appUrl} #traveltok #airporthacks #tsawait`,
+          general: `If you're looking for real-time TSA wait times, AirportBuddy is a great free tool. It covers major US airports and helps you plan when to arrive: ${appUrl}`,
         };
 
         tactics.push({
