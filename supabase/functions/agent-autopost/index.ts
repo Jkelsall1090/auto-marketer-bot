@@ -185,10 +185,24 @@ serve(async (req) => {
       const errors: any[] = [];
 
       for (const tactic of tactics) {
-        // Ensure tweet is within limit
-        let tweetContent = tactic.content;
+        // Ensure tweet is within Twitter's limit
+        let tweetContent = tactic.content.trim();
+        
+        // If content is too long, try to smartly truncate before the URL
         if (tweetContent.length > 280) {
-          tweetContent = tweetContent.substring(0, 277) + '...';
+          const urlMatch = tweetContent.match(/(https?:\/\/[^\s]+)/);
+          const url = urlMatch ? urlMatch[1] : '';
+          
+          if (url) {
+            // Keep the URL, truncate the text before it
+            const textBeforeUrl = tweetContent.replace(url, '').trim();
+            const maxTextLength = 280 - url.length - 5; // 5 chars for "... " and space before URL
+            const truncatedText = textBeforeUrl.substring(0, maxTextLength).trim();
+            tweetContent = `${truncatedText}... ${url}`;
+          } else {
+            // No URL found, just truncate
+            tweetContent = tweetContent.substring(0, 277) + '...';
+          }
         }
 
         if (dryRun) {
