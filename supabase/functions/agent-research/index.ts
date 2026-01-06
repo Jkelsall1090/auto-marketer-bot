@@ -1,10 +1,125 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
+import { createHmac } from "node:crypto";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Twitter OAuth helpers
+function generateOAuthSignature(
+  method: string,
+  url: string,
+  params: Record<string, string>,
+  consumerSecret: string,
+  tokenSecret: string
+): string {
+  const signatureBaseString = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(
+    Object.entries(params)
+      .sort()
+      .map(([k, v]) => `${k}=${v}`)
+      .join("&")
+  )}`;
+  const signingKey = `${encodeURIComponent(consumerSecret)}&${encodeURIComponent(tokenSecret)}`;
+  const hmacSha1 = createHmac("sha1", signingKey);
+  return hmacSha1.update(signatureBaseString).digest("base64");
+}
+
+function generateOAuthHeader(
+  method: string, 
+  url: string,
+  apiKey: string,
+  apiSecret: string,
+  accessToken: string,
+  accessTokenSecret: string
+): string {
+  const oauthParams: Record<string, string> = {
+    oauth_consumer_key: apiKey,
+    oauth_nonce: Math.random().toString(36).substring(2),
+    oauth_signature_method: "HMAC-SHA1",
+    oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
+    oauth_token: accessToken,
+    oauth_version: "1.0",
+  };
+
+  const signature = generateOAuthSignature(
+    method,
+    url,
+    oauthParams,
+    apiSecret,
+    accessTokenSecret
+  );
+
+  const signedOAuthParams = {
+    ...oauthParams,
+    oauth_signature: signature,
+  };
+
+  const entries = Object.entries(signedOAuthParams).sort((a, b) =>
+    a[0].localeCompare(b[0])
+  );
+
+  return (
+    "OAuth " +
+    entries
+      .map(([k, v]) => `${encodeURIComponent(k)}="${encodeURIComponent(v)}"`)
+      .join(", ")
+  );
+}
+
+// Search Twitter for relevant tweets
+async function searchTwitter(
+  query: string,
+  apiKey: string,
+  apiSecret: string,
+  accessToken: string,
+  accessTokenSecret: string,
+  maxResults: number = 10
+): Promise<any[]> {
+  // Twitter API v2 recent search endpoint
+  const baseUrl = "https://api.x.com/2/tweets/search/recent";
+  const params = new URLSearchParams({
+    query: query,
+    max_results: Math.min(maxResults, 100).toString(),
+    'tweet.fields': 'author_id,created_at,public_metrics,conversation_id',
+    expansions: 'author_id',
+  });
+  
+  const url = `${baseUrl}?${params.toString()}`;
+  const oauthHeader = generateOAuthHeader(
+    "GET",
+    baseUrl,
+    apiKey,
+    apiSecret,
+    accessToken,
+    accessTokenSecret
+  );
+
+  console.log(`Searching Twitter: ${query}`);
+  
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: oauthHeader,
+    },
+  });
+
+  const responseText = await response.text();
+  
+  if (!response.ok) {
+    console.error(`Twitter search error: ${response.status} - ${responseText}`);
+    return [];
+  }
+
+  try {
+    const data = JSON.parse(responseText);
+    return data.data || [];
+  } catch (e) {
+    console.error('Failed to parse Twitter response:', e);
+    return [];
+  }
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -23,7 +138,12 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
+    
+    // Twitter API credentials
+    const twitterApiKey = Deno.env.get('TWITTER_CONSUMER_KEY')?.trim();
+    const twitterApiSecret = Deno.env.get('TWITTER_CONSUMER_SECRET')?.trim();
+    const twitterAccessToken = Deno.env.get('TWITTER_ACCESS_TOKEN')?.trim();
+    const twitterAccessTokenSecret = Deno.env.get('TWITTER_ACCESS_TOKEN_SECRET')?.trim();
     
     const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -42,7 +162,7 @@ serve(async (req) => {
       );
     }
 
-    console.log('Starting research for campaign:', campaign.name);
+    console.log('Starting Twitter-focused research for campaign:', campaign.name);
 
     // Update agent state to research phase
     await supabase
@@ -54,132 +174,128 @@ serve(async (req) => {
       }, { onConflict: 'campaign_id' });
 
     const findings: any[] = [];
-    const channels = campaign.channels as string[] || [];
     
-    // Research queries across multiple platforms
-    const searchQueries = [
-      // Reddit
-      `TSA wait times app site:reddit.com`,
-      // Facebook
-      `TSA wait times app site:facebook.com`,
-      // Twitter/X
-      `TSA wait times app site:twitter.com OR site:x.com`,
-      // TikTok
-      `TSA wait times site:tiktok.com`,
-      // Instagram
-      `TSA wait times site:instagram.com`,
-      // General
-      `best airport apps real-time wait times ${new Date().getFullYear()}`,
-      // Product-specific
-      `${campaign.product} TSA wait times`,
+    // Twitter-specific search queries for finding tweets to reply to
+    const twitterSearchQueries = [
+      // People asking about TSA/airport wait times
+      'TSA wait times -is:retweet lang:en',
+      'airport security line -is:retweet lang:en',
+      'long TSA line -is:retweet lang:en',
+      // People at airports or about to fly
+      'airport wait -is:retweet lang:en',
+      'how long security -is:retweet lang:en',
+      // Travel frustration
+      'airport delay security -is:retweet lang:en',
     ];
 
-    const maxQueries = 6;
+    const hasTwitterCredentials = twitterApiKey && twitterApiSecret && twitterAccessToken && twitterAccessTokenSecret;
 
-    // Use Firecrawl search if available
-    if (firecrawlKey) {
-      for (const query of searchQueries.slice(0, maxQueries)) {
+    if (hasTwitterCredentials) {
+      console.log('Using Twitter API to search for tweets');
+      
+      for (const query of twitterSearchQueries) {
         try {
-          console.log('Searching:', query);
-          
-          const response = await fetch('https://api.firecrawl.dev/v1/search', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${firecrawlKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              query,
-              limit: 4,
-              tbs: 'qdr:w', // Last week
-            }),
-          });
+          const tweets = await searchTwitter(
+            query,
+            twitterApiKey,
+            twitterApiSecret,
+            twitterAccessToken,
+            twitterAccessTokenSecret,
+            10
+          );
 
-          const data = await response.json();
-          
-          if (data.success && data.data) {
-            for (const result of data.data) {
-              findings.push({
-                campaign_id,
-                title: result.title || 'Untitled',
-                finding_type: 'opportunity',
-                source_url: result.url,
-                content: result.description || result.markdown?.substring(0, 500),
-                relevance_score: 7,
-                processed: false,
-              });
-            }
+          for (const tweet of tweets) {
+            // Create a proper Twitter URL for the tweet
+            const tweetUrl = `https://x.com/i/web/status/${tweet.id}`;
+            
+            findings.push({
+              campaign_id,
+              title: `Tweet: ${tweet.text.substring(0, 50)}...`,
+              finding_type: 'twitter_opportunity',
+              source_url: tweetUrl,
+              content: tweet.text,
+              relevance_score: 8,
+              processed: false,
+            });
           }
+          
+          console.log(`Found ${tweets.length} tweets for query: ${query}`);
         } catch (err) {
-          console.error('Search error for query:', query, err);
+          console.error('Twitter search error for query:', query, err);
         }
       }
     } else {
-      // Fallback: generate mock research findings for demo
-      console.log('Firecrawl not configured, generating sample findings');
+      // Fallback: generate mock Twitter findings for demo
+      console.log('Twitter API not configured, generating sample Twitter findings');
       
-      const sampleFindings = [
+      // These are example tweet IDs - in production, these would be real tweet IDs
+      const sampleTweets = [
         {
-          title: "r/travel - Best apps for frequent flyers?",
-          source_url: "https://reddit.com/r/travel/comments/example1",
-          content: "Looking for apps that help with airport navigation and TSA wait times. Any recommendations? I fly weekly for work and the uncertainty is killing me.",
-          relevance_score: 9,
-        },
-        {
-          title: "r/flights - Long TSA lines frustration thread",
-          source_url: "https://reddit.com/r/flights/comments/example2", 
-          content: "Just spent 2 hours in TSA line at JFK. There has to be a better way to know wait times! Anyone have tips?",
+          title: "Tweet: TSA wait times at LAX are insane today...",
+          source_url: "https://x.com/i/web/status/1875961234567890123",
+          content: "TSA wait times at LAX are insane today. Been waiting 45 minutes and still not through. Anyone know if there's a way to check these beforehand?",
           relevance_score: 10,
         },
         {
-          title: "Facebook Travel Hackers - Airport tips thread",
-          source_url: "https://facebook.com/groups/travelhackers/posts/example3",
-          content: "Share your best airport hacks! I'm looking for ways to speed through security. Are there any apps that show real wait times?",
-          relevance_score: 8,
-        },
-        {
-          title: "Twitter - @FrequentFlyer asking about delays",
-          source_url: "https://twitter.com/FrequentFlyer/status/example4",
-          content: "Does anyone know an app that predicts TSA wait times? Tired of guessing when to leave for the airport.",
-          relevance_score: 8,
-        },
-        {
-          title: "TikTok - #AirportHacks viral comment section",
-          source_url: "https://tiktok.com/@traveler/video/example5",
-          content: "Video about airport tips has 500+ comments asking for TSA wait time solutions. Perfect opportunity to mention the app.",
+          title: "Tweet: Flying out of JFK tomorrow, nervous about lines...",
+          source_url: "https://x.com/i/web/status/1875962345678901234",
+          content: "Flying out of JFK tomorrow morning. Super nervous about security lines. How early should I arrive? Is there an app for this?",
           relevance_score: 9,
         },
         {
-          title: "Instagram - Travel influencer Q&A",
-          source_url: "https://instagram.com/p/example6",
-          content: "Influencer asking followers: What apps do you use for stress-free airport experience? 1.2k comments.",
-          relevance_score: 7,
+          title: "Tweet: Airport tip - always check wait times before...",
+          source_url: "https://x.com/i/web/status/1875963456789012345",
+          content: "Airport tip: always check wait times before leaving for the airport. Saved me so much stress on my last trip!",
+          relevance_score: 8,
+        },
+        {
+          title: "Tweet: Stuck in TSA PreCheck line for 30 mins...",
+          source_url: "https://x.com/i/web/status/1875964567890123456",
+          content: "Even TSA PreCheck at ORD is backed up 30 mins today. Someone should make an app that shows real-time wait times!",
+          relevance_score: 10,
+        },
+        {
+          title: "Tweet: Best travel apps for frequent flyers?...",
+          source_url: "https://x.com/i/web/status/1875965678901234567",
+          content: "Looking for the best travel apps for frequent flyers. Especially need something for tracking airport security wait times. Suggestions?",
+          relevance_score: 9,
+        },
+        {
+          title: "Tweet: Almost missed my flight due to security...",
+          source_url: "https://x.com/i/web/status/1875966789012345678",
+          content: "Almost missed my flight because I underestimated security wait time at DFW. There has to be a better way to plan for this!",
+          relevance_score: 10,
         },
       ];
 
-      for (const finding of sampleFindings) {
+      for (const tweet of sampleTweets) {
         findings.push({
           campaign_id,
-          title: finding.title,
-          finding_type: 'opportunity',
-          source_url: finding.source_url,
-          content: finding.content,
-          relevance_score: finding.relevance_score,
+          title: tweet.title,
+          finding_type: 'twitter_opportunity',
+          source_url: tweet.source_url,
+          content: tweet.content,
+          relevance_score: tweet.relevance_score,
           processed: false,
         });
       }
     }
 
+    // Deduplicate by source_url
+    const uniqueFindings = findings.filter((finding, index, self) =>
+      index === self.findIndex(f => f.source_url === finding.source_url)
+    );
+
     // Save findings to database
-    if (findings.length > 0) {
+    if (uniqueFindings.length > 0) {
       const { error: insertError } = await supabase
         .from('research_findings')
-        .insert(findings);
+        .insert(uniqueFindings);
 
       if (insertError) {
         console.error('Error saving findings:', insertError);
       } else {
-        console.log(`Saved ${findings.length} research findings`);
+        console.log(`Saved ${uniqueFindings.length} Twitter research findings`);
       }
     }
 
@@ -188,15 +304,16 @@ serve(async (req) => {
       .from('agent_state')
       .update({
         phase: 'planning',
-        opportunities_queued: findings.length,
+        opportunities_queued: uniqueFindings.length,
       })
       .eq('campaign_id', campaign_id);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        findings_count: findings.length,
-        findings: findings.map(f => ({ title: f.title, url: f.source_url, score: f.relevance_score }))
+        findings_count: uniqueFindings.length,
+        platform: 'twitter',
+        findings: uniqueFindings.map(f => ({ title: f.title, url: f.source_url, score: f.relevance_score }))
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
