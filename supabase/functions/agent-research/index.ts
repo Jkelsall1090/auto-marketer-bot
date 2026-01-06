@@ -114,14 +114,18 @@ serve(async (req) => {
         'site:twitter.com OR site:x.com airport tips travel',
       ];
     } else if (productLower.includes('etsy') || productLower.includes('coloring') || productLower.includes('kids') || productLower.includes('prompted')) {
-      // Etsy Kids Digital Downloads campaign queries
+      // Etsy Kids Digital Downloads campaign queries - broader and more varied
       searchQueries = [
-        'site:twitter.com OR site:x.com kids coloring books activities',
-        'site:twitter.com OR site:x.com toddler activities at home',
-        'site:twitter.com OR site:x.com kids printable worksheets',
-        'site:twitter.com OR site:x.com rainy day activities kids',
-        'site:twitter.com OR site:x.com homeschool printables toddler',
-        'site:twitter.com OR site:x.com preschool tracing letters',
+        'site:twitter.com OR site:x.com "keep kids busy"',
+        'site:twitter.com OR site:x.com "toddler bored" activities',
+        'site:twitter.com OR site:x.com "rainy day" kids indoor',
+        'site:twitter.com OR site:x.com "screen free" activities kids',
+        'site:twitter.com OR site:x.com preschool homeschool activities',
+        'site:twitter.com OR site:x.com "kids crafts" printable',
+        'site:twitter.com OR site:x.com "quiet time" toddler activities',
+        'site:twitter.com OR site:x.com "what to do" kids home',
+        'site:twitter.com OR site:x.com coloring pages kids free',
+        'site:twitter.com OR site:x.com "summer activities" kids bored',
       ];
     } else {
       // Generic product queries
