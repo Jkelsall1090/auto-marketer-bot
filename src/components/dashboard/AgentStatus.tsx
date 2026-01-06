@@ -8,11 +8,21 @@ import {
   CheckCircle2,
   AlertTriangle,
   RefreshCw,
-  Loader2
+  Loader2,
+  ChevronDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useCampaigns } from "@/hooks/useCampaigns";
 
 interface AgentStatusProps {
   phase: string;
@@ -30,17 +40,26 @@ export function AgentStatus({
   opportunitiesQueued 
 }: AgentStatusProps) {
   const [isTriggering, setIsTriggering] = useState(false);
+  const { data: campaigns } = useCampaigns();
 
-  const handleForceRun = async () => {
+  const handleForceRun = async (campaignId?: string) => {
     setIsTriggering(true);
     try {
+      const body: { dry_run: boolean; campaign_id?: string } = { dry_run: false };
+      if (campaignId) {
+        body.campaign_id = campaignId;
+      }
+
       const { data, error } = await supabase.functions.invoke('agent-autopost', {
-        body: { dry_run: false }
+        body
       });
 
       if (error) throw error;
 
-      toast.success(`Agent run complete! Posted ${data?.total_tweets_posted || 0} tweets.`);
+      const campaignName = campaignId 
+        ? campaigns?.find(c => c.id === campaignId)?.name || 'Selected campaign'
+        : 'All campaigns';
+      toast.success(`${campaignName}: Posted ${data?.total_tweets_posted || 0} tweets.`);
       console.log('Agent run result:', data);
     } catch (err: any) {
       console.error('Agent run failed:', err);
@@ -49,24 +68,52 @@ export function AgentStatus({
       setIsTriggering(false);
     }
   };
+
+  const activeCampaigns = campaigns?.filter(c => c.status === 'active') || [];
+
   return (
     <div className="rounded-xl border border-border bg-gradient-card p-6">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-foreground">Agent Status</h3>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="gap-2"
-          onClick={handleForceRun}
-          disabled={isTriggering}
-        >
-          {isTriggering ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
-          {isTriggering ? "Running..." : "Force Run"}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-2"
+              disabled={isTriggering}
+            >
+              {isTriggering ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              {isTriggering ? "Running..." : "Force Run"}
+              <ChevronDown className="h-3 w-3" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>Select Campaign</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => handleForceRun()}>
+              <span className="font-medium">Run All Campaigns</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {activeCampaigns.map((campaign) => (
+              <DropdownMenuItem 
+                key={campaign.id} 
+                onClick={() => handleForceRun(campaign.id)}
+              >
+                {campaign.name}
+              </DropdownMenuItem>
+            ))}
+            {activeCampaigns.length === 0 && (
+              <DropdownMenuItem disabled>
+                No active campaigns
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="mt-6 grid gap-4">
