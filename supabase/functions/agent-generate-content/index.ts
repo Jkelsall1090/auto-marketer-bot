@@ -156,7 +156,25 @@ serve(async (req) => {
       // Generate content using Lovable AI
       if (lovableApiKey) {
         try {
-          const appUrl = 'https://airportbuddy.app/';
+          // Determine campaign-specific details
+          const productLower = campaign.product.toLowerCase();
+          let appUrl: string;
+          let productDescription: string;
+          let targetAudience: string;
+          
+          if (productLower.includes('airport') || productLower.includes('travel') || productLower.includes('buddy')) {
+            appUrl = 'https://airportbuddy.app/';
+            productDescription = 'AirportBuddy - a free app that shows real-time TSA wait times at US airports';
+            targetAudience = 'travelers';
+          } else if (productLower.includes('etsy') || productLower.includes('coloring') || productLower.includes('kids') || productLower.includes('prompted')) {
+            appUrl = 'https://www.etsy.com/shop/PromptedbyJamesandCo';
+            productDescription = 'PromptedbyJamesandCo - an Etsy shop with kids coloring books, tracing worksheets, and educational digital downloads';
+            targetAudience = 'parents';
+          } else {
+            appUrl = campaign.product;
+            productDescription = campaign.product;
+            targetAudience = 'general';
+          }
           
           const platformGuidelines: Record<string, string> = {
             twitter: `CRITICAL: Tweet must be UNDER 250 characters (leave room for URL). 
@@ -167,7 +185,7 @@ serve(async (req) => {
             reddit: `Write a helpful, conversational Reddit comment (300-500 chars).
 - Address the specific question/problem
 - Provide genuine value first
-- Naturally mention AirportBuddy with URL: ${appUrl}
+- Naturally mention the product with URL: ${appUrl}
 - Don't be salesy`,
             default: `Write a helpful, natural response.
 - Provide value first
@@ -177,10 +195,10 @@ serve(async (req) => {
           
           const guidelines = platformGuidelines[platform] || platformGuidelines.default;
           
-          const systemPrompt = `You are a helpful marketing assistant for AirportBuddy - a free app that shows real-time TSA wait times at US airports.
+          const systemPrompt = `You are a helpful marketing assistant for ${productDescription}.
 
 Product: ${campaign.product}
-App URL: ${appUrl}
+URL: ${appUrl}
 
 RULES:
 - ALWAYS include the URL (${appUrl}) in your response as plain text
@@ -195,8 +213,8 @@ Context: ${finding.content}
 ${finding.source_url ? `Source: ${finding.source_url}` : ''}
 
 Write a ${platform === 'twitter' ? 'tweet (MAX 250 characters including URL!)' : platform === 'reddit' ? 'Reddit comment' : 'post'} that:
-1. Addresses the user's actual concern
-2. Mentions how AirportBuddy helps
+1. Addresses the user's actual concern or question
+2. Provides helpful value related to ${productDescription}
 3. MUST include ${appUrl} as plain text
 
 ${platform === 'twitter' ? 'IMPORTANT: Keep it SHORT - under 250 chars total!' : ''}
@@ -228,7 +246,7 @@ Return ONLY the final content text, nothing else.`;
                 platform,
                 tactic_type: platform === 'reddit' ? 'comment' : platform === 'twitter' ? 'tweet' : 'post',
                 content: generatedContent.trim(),
-                target_audience: 'travelers',
+                target_audience: targetAudience,
                 estimated_impact: finding.relevance_score >= 8 ? 'high' : 'medium',
                 priority: finding.relevance_score,
                 executed: false,
@@ -244,22 +262,45 @@ Return ONLY the final content text, nothing else.`;
         } catch (err) {
           console.error('Content generation error:', err);
         }
+      } else {
         // Fallback content generation (when no AI key)
-        const appUrl = 'https://airportbuddy.app/';
-        const templates: Record<string, string> = {
-          reddit: `I've been using AirportBuddy for exactly this! It shows real-time TSA wait times so you know exactly when to head to the airport. Saved me from missing a flight last month. Check it out: ${appUrl}`,
-          facebook: `Great question! For real-time TSA wait times, I recommend AirportBuddy (${appUrl}) - it's a free web app that shows current wait times at major US airports. Makes travel planning so much easier! 🛫`,
-          twitter: `Skip the TSA guessing game ✈️ AirportBuddy shows real-time wait times so you know exactly when to arrive. ${appUrl}`,
-          tiktok: `POV: You stop stressing about TSA lines because AirportBuddy tells you the wait before you leave 🎯 ${appUrl} #traveltok`,
-          general: `For real-time TSA wait times, AirportBuddy is a great free tool covering major US airports: ${appUrl}`,
-        };
+        const productLower = campaign.product.toLowerCase();
+        let appUrl: string;
+        let templates: Record<string, string>;
+        let targetAudience: string;
+        
+        if (productLower.includes('airport') || productLower.includes('travel') || productLower.includes('buddy')) {
+          appUrl = 'https://airportbuddy.app/';
+          targetAudience = 'travelers';
+          templates = {
+            reddit: `I've been using AirportBuddy for exactly this! It shows real-time TSA wait times so you know exactly when to head to the airport. Saved me from missing a flight last month. Check it out: ${appUrl}`,
+            facebook: `Great question! For real-time TSA wait times, I recommend AirportBuddy (${appUrl}) - it's a free web app that shows current wait times at major US airports. Makes travel planning so much easier! 🛫`,
+            twitter: `Skip the TSA guessing game ✈️ AirportBuddy shows real-time wait times so you know exactly when to arrive. ${appUrl}`,
+            tiktok: `POV: You stop stressing about TSA lines because AirportBuddy tells you the wait before you leave 🎯 ${appUrl} #traveltok`,
+            general: `For real-time TSA wait times, AirportBuddy is a great free tool covering major US airports: ${appUrl}`,
+          };
+        } else if (productLower.includes('etsy') || productLower.includes('coloring') || productLower.includes('kids') || productLower.includes('prompted')) {
+          appUrl = 'https://www.etsy.com/shop/PromptedbyJamesandCo';
+          targetAudience = 'parents';
+          templates = {
+            twitter: `Keeping kids busy? 🎨 Check out these fun coloring & tracing printables - instant download! ${appUrl}`,
+            reddit: `My kids love printable activities! We use coloring books and tracing sheets from this Etsy shop - instant downloads so you can print right away: ${appUrl}`,
+            general: `Looking for kids activities? Check out these digital coloring books and tracing worksheets: ${appUrl}`,
+          };
+        } else {
+          appUrl = campaign.product;
+          targetAudience = 'general';
+          templates = {
+            general: `Check out ${campaign.product}`,
+          };
+        }
 
         tactics.push({
           campaign_id,
           platform,
           tactic_type: platform === 'reddit' ? 'comment' : 'post',
           content: templates[platform] || templates.general,
-          target_audience: 'travelers',
+          target_audience: targetAudience,
           estimated_impact: 'medium',
           priority: finding.relevance_score,
           executed: false,

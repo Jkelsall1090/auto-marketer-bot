@@ -100,14 +100,37 @@ serve(async (req) => {
 
     const findings: any[] = [];
     
-    // Search queries to find Twitter discussions about airports/TSA
-    const searchQueries = [
-      'site:twitter.com OR site:x.com TSA wait times',
-      'site:twitter.com OR site:x.com airport security line long',
-      'site:twitter.com OR site:x.com airport delay security',
-      'site:twitter.com OR site:x.com "how early" airport flight',
-      'site:twitter.com OR site:x.com airport tips travel',
-    ];
+    // Generate campaign-specific search queries based on product
+    const productLower = campaign.product.toLowerCase();
+    let searchQueries: string[] = [];
+    
+    if (productLower.includes('airport') || productLower.includes('travel') || productLower.includes('buddy')) {
+      // AirportBuddy campaign queries
+      searchQueries = [
+        'site:twitter.com OR site:x.com TSA wait times',
+        'site:twitter.com OR site:x.com airport security line long',
+        'site:twitter.com OR site:x.com airport delay security',
+        'site:twitter.com OR site:x.com "how early" airport flight',
+        'site:twitter.com OR site:x.com airport tips travel',
+      ];
+    } else if (productLower.includes('etsy') || productLower.includes('coloring') || productLower.includes('kids') || productLower.includes('prompted')) {
+      // Etsy Kids Digital Downloads campaign queries
+      searchQueries = [
+        'site:twitter.com OR site:x.com kids coloring books activities',
+        'site:twitter.com OR site:x.com toddler activities at home',
+        'site:twitter.com OR site:x.com kids printable worksheets',
+        'site:twitter.com OR site:x.com rainy day activities kids',
+        'site:twitter.com OR site:x.com homeschool printables toddler',
+        'site:twitter.com OR site:x.com preschool tracing letters',
+      ];
+    } else {
+      // Generic product queries
+      searchQueries = [
+        `site:twitter.com OR site:x.com ${campaign.product}`,
+      ];
+    }
+    
+    console.log(`Using ${searchQueries.length} search queries for campaign: ${campaign.name}`);
 
     if (firecrawlApiKey) {
       console.log('Using Firecrawl to search for Twitter content');
