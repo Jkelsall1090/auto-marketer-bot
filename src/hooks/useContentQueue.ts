@@ -3,7 +3,12 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 
-export type MarketingTactic = Tables<"marketing_tactics">;
+// Extend the base type with the new columns we added
+export type MarketingTactic = Tables<"marketing_tactics"> & {
+  source_finding_id?: string | null;
+  source_url?: string | null;
+  source_context?: string | null;
+};
 export type ResearchFinding = Tables<"research_findings">;
 export type AgentState = Tables<"agent_state">;
 
