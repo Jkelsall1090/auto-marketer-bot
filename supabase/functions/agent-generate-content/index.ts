@@ -45,29 +45,53 @@ serve(async (req) => {
     }
 
     // Get unprocessed findings
-    let findingsQuery = supabase
-      .from('research_findings')
-      .select('*')
-      .eq('campaign_id', campaign_id)
-      .eq('processed', false)
-      .order('relevance_score', { ascending: false })
-      .limit(25);
-
+    // When targeting Twitter, we need to specifically query for findings with tweet status URLs
+    let findingsQuery;
+    
     if (finding_id) {
       findingsQuery = supabase
         .from('research_findings')
         .select('*')
         .eq('id', finding_id);
+    } else if (targetPlatform === 'twitter') {
+      // For Twitter, specifically query for findings with tweet status URLs
+      // Use ilike to match /status/ patterns in twitter.com or x.com URLs
+      findingsQuery = supabase
+        .from('research_findings')
+        .select('*')
+        .eq('campaign_id', campaign_id)
+        .eq('processed', false)
+        .or('source_url.ilike.%twitter.com%/status/%,source_url.ilike.%x.com%/status/%')
+        .order('relevance_score', { ascending: false })
+        .limit(maxPosts + 5);
+    } else {
+      // General query for all findings
+      findingsQuery = supabase
+        .from('research_findings')
+        .select('*')
+        .eq('campaign_id', campaign_id)
+        .eq('processed', false)
+        .order('relevance_score', { ascending: false })
+        .limit(50);
     }
 
     const { data: findings, error: findingsError } = await findingsQuery;
 
+    console.log(`Found ${findings?.length || 0} unprocessed findings for campaign ${campaign_id}, target: ${targetPlatform || 'all'}`);
+
     if (findingsError || !findings?.length) {
+      console.log('No findings found, error:', findingsError);
+      const errorMsg = targetPlatform === 'twitter' 
+        ? 'No valid tweet URLs found in research findings. Run research to find tweets first.'
+        : 'No findings to process';
       return new Response(
-        JSON.stringify({ success: false, error: 'No findings to process' }),
+        JSON.stringify({ success: false, error: errorMsg }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Log sample of findings for debugging
+    console.log('Sample findings:', findings.slice(0, 3).map(f => ({ id: f.id, url: f.source_url })));
 
     const inferPlatform = (url?: string | null) => {
       const u = (url ?? "").toLowerCase();
@@ -89,20 +113,10 @@ serve(async (req) => {
     const allFindings = findings ?? [];
     let selectedFindings = allFindings;
 
-    // If targeting Twitter specifically, ONLY use findings with valid tweet status URLs
+    // For Twitter, findings are already filtered by query to have valid status URLs
     if (targetPlatform === 'twitter') {
-      const twitterFindings = allFindings.filter(f => isValidTweetUrl(f.source_url));
-      
-      if (twitterFindings.length === 0) {
-        console.log('No findings with valid tweet URLs to reply to');
-        return new Response(
-          JSON.stringify({ success: false, error: 'No valid tweet URLs found in research findings. Run research to find tweets first.' }),
-          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      selectedFindings = twitterFindings.slice(0, maxPosts);
-      console.log(`Generating ${selectedFindings.length} ${targetPlatform} replies (from ${twitterFindings.length} tweet opportunities)`);
+      selectedFindings = allFindings.slice(0, maxPosts);
+      console.log(`Generating ${selectedFindings.length} ${targetPlatform} replies from tweet opportunities`);
     } else if (targetPlatform && targetPlatform !== 'all') {
       // Other specific platform
       selectedFindings = allFindings.slice(0, maxPosts);
