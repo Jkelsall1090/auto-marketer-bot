@@ -204,6 +204,19 @@ serve(async (req) => {
       const errors: any[] = [];
 
       for (const tactic of tactics) {
+        // ONLY post replies - skip if no tweet ID to reply to
+        const replyToTweetId = extractTweetId(tactic.source_url);
+        
+        if (!replyToTweetId) {
+          console.log(`Skipping tactic ${tactic.id} - no valid tweet ID to reply to (source: ${tactic.source_url})`);
+          // Mark as executed so we don't keep trying
+          await supabase
+            .from('marketing_tactics')
+            .update({ executed: true })
+            .eq('id', tactic.id);
+          continue;
+        }
+
         // Ensure tweet is within Twitter's limit
         let tweetContent = tactic.content.trim();
         
@@ -225,19 +238,16 @@ serve(async (req) => {
         }
 
         if (dryRun) {
-          console.log(`[DRY RUN] Would post: ${tweetContent.substring(0, 50)}...`);
-          postedTweets.push({ id: tactic.id, content: tweetContent, dry_run: true });
+          console.log(`[DRY RUN] Would reply to ${replyToTweetId}: ${tweetContent.substring(0, 50)}...`);
+          postedTweets.push({ id: tactic.id, content: tweetContent, reply_to: replyToTweetId, dry_run: true });
           tweetsPosted++;
           continue;
         }
 
         try {
-          // Check if this is a reply to a tweet
-          const replyToTweetId = extractTweetId(tactic.source_url);
-          
-          // Post to Twitter (as reply if we have a tweet ID)
-          const twitterResult = await sendTweet(tweetContent, replyToTweetId || undefined);
-          console.log(`Posted tweet: ${twitterResult.data?.id}${replyToTweetId ? ` (reply to ${replyToTweetId})` : ''}`);
+          // Post reply to Twitter
+          const twitterResult = await sendTweet(tweetContent, replyToTweetId);
+          console.log(`Posted reply to ${replyToTweetId}: ${twitterResult.data?.id}`);
 
           // Mark as executed
           await supabase
@@ -251,7 +261,7 @@ serve(async (req) => {
             .insert({
               campaign_id: campaign.id,
               platform: 'twitter',
-              action_type: replyToTweetId ? 'reply' : 'tweet',
+              action_type: 'reply',
               content: tweetContent,
               url: `https://twitter.com/i/web/status/${twitterResult.data?.id}`,
               status: 'completed',
@@ -261,6 +271,7 @@ serve(async (req) => {
           postedTweets.push({
             id: tactic.id,
             twitter_id: twitterResult.data?.id,
+            reply_to: replyToTweetId,
             content: tweetContent.substring(0, 50) + '...',
           });
 
