@@ -9,12 +9,15 @@ import { AgentStatus } from "@/components/dashboard/AgentStatus";
 import { NewCampaignModal } from "@/components/campaigns/NewCampaignModal";
 import { SettingsPanel } from "@/components/settings/SettingsPanel";
 import { AnalyticsPanel } from "@/components/analytics/AnalyticsPanel";
+import { ContentQueuePanel } from "@/components/content-queue/ContentQueuePanel";
+import { useCampaigns, useCreateCampaign } from "@/hooks/useCampaigns";
 import { 
   Users, 
   MousePointerClick, 
   MessageCircle, 
   TrendingUp,
-  Rocket
+  Rocket,
+  Loader2
 } from "lucide-react";
 
 const mockCampaigns = [
@@ -61,11 +64,36 @@ const mockCampaigns = [
 export default function Index() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isNewCampaignOpen, setIsNewCampaignOpen] = useState(false);
+  
+  const { data: campaigns, isLoading: campaignsLoading } = useCampaigns();
+  const createCampaign = useCreateCampaign();
 
-  const handleNewCampaign = (data: any) => {
-    console.log("New campaign:", data);
-    // TODO: Save campaign to database
+  const handleNewCampaign = async (data: any) => {
+    await createCampaign.mutateAsync({
+      name: data.name,
+      product: data.product,
+      goals: data.goals,
+      channels: data.channels,
+      budget: data.budget,
+      schedule_interval: data.schedule,
+    });
+    setIsNewCampaignOpen(false);
   };
+
+  // Use database campaigns or fallback to mock for demo
+  const displayCampaigns = campaigns?.length ? campaigns.map(c => ({
+    name: c.name,
+    product: c.product,
+    status: c.status as "active" | "paused" | "completed",
+    channels: (c.channels as string[]) || [],
+    metrics: {
+      impressions: 0,
+      clicks: 0,
+      engagements: 0,
+      sentiment: 0.85,
+    },
+    nextRun: "Ready to run",
+  })) : mockCampaigns;
 
   const renderContent = () => {
     switch (activeTab) {
@@ -136,22 +164,31 @@ export default function Index() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {mockCampaigns.map((campaign, index) => (
-                <CampaignCard key={index} {...campaign} />
-              ))}
-              
-              {/* Add Campaign Card */}
-              <button
-                onClick={() => setIsNewCampaignOpen(true)}
-                className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border p-8 text-muted-foreground transition-all hover:border-primary hover:text-primary"
-              >
-                <Rocket className="h-10 w-10" />
-                <span className="text-lg font-medium">Create New Campaign</span>
-              </button>
-            </div>
+            {campaignsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {displayCampaigns.map((campaign, index) => (
+                  <CampaignCard key={index} {...campaign} />
+                ))}
+                
+                {/* Add Campaign Card */}
+                <button
+                  onClick={() => setIsNewCampaignOpen(true)}
+                  className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border p-8 text-muted-foreground transition-all hover:border-primary hover:text-primary"
+                >
+                  <Rocket className="h-10 w-10" />
+                  <span className="text-lg font-medium">Create New Campaign</span>
+                </button>
+              </div>
+            )}
           </div>
         );
+
+      case "content-queue":
+        return <ContentQueuePanel />;
 
       case "activity":
         return (

@@ -1,1 +1,10 @@
 project_id = "rqvdxclxoasdjvuwvngm"
+
+[functions.agent-research]
+verify_jwt = false
+
+[functions.agent-generate-content]
+verify_jwt = false
+
+[functions.agent-run]
+verify_jwt = false
