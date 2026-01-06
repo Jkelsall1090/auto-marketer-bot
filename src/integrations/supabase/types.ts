@@ -14,7 +14,283 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      actions_taken: {
+        Row: {
+          action_type: string
+          campaign_id: string
+          click_count: number | null
+          content: string | null
+          created_at: string | null
+          engagement_count: number | null
+          executed_at: string | null
+          id: string
+          platform: string
+          relevance_score: number | null
+          status: Database["public"]["Enums"]["action_status"] | null
+          url: string | null
+        }
+        Insert: {
+          action_type: string
+          campaign_id: string
+          click_count?: number | null
+          content?: string | null
+          created_at?: string | null
+          engagement_count?: number | null
+          executed_at?: string | null
+          id?: string
+          platform: string
+          relevance_score?: number | null
+          status?: Database["public"]["Enums"]["action_status"] | null
+          url?: string | null
+        }
+        Update: {
+          action_type?: string
+          campaign_id?: string
+          click_count?: number | null
+          content?: string | null
+          created_at?: string | null
+          engagement_count?: number | null
+          executed_at?: string | null
+          id?: string
+          platform?: string
+          relevance_score?: number | null
+          status?: Database["public"]["Enums"]["action_status"] | null
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "actions_taken_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_run_logs: {
+        Row: {
+          actions_count: number | null
+          campaign_id: string
+          created_at: string | null
+          errors_count: number | null
+          id: string
+          phase_completed: Database["public"]["Enums"]["agent_phase"] | null
+          run_completed_at: string | null
+          run_started_at: string | null
+          summary: string | null
+        }
+        Insert: {
+          actions_count?: number | null
+          campaign_id: string
+          created_at?: string | null
+          errors_count?: number | null
+          id?: string
+          phase_completed?: Database["public"]["Enums"]["agent_phase"] | null
+          run_completed_at?: string | null
+          run_started_at?: string | null
+          summary?: string | null
+        }
+        Update: {
+          actions_count?: number | null
+          campaign_id?: string
+          created_at?: string | null
+          errors_count?: number | null
+          id?: string
+          phase_completed?: Database["public"]["Enums"]["agent_phase"] | null
+          run_completed_at?: string | null
+          run_started_at?: string | null
+          summary?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_run_logs_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_state: {
+        Row: {
+          campaign_id: string
+          created_at: string | null
+          error_count: number | null
+          id: string
+          last_error: string | null
+          last_run_at: string | null
+          metrics: Json | null
+          next_run_at: string | null
+          opportunities_queued: number | null
+          phase: Database["public"]["Enums"]["agent_phase"] | null
+          updated_at: string | null
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string | null
+          error_count?: number | null
+          id?: string
+          last_error?: string | null
+          last_run_at?: string | null
+          metrics?: Json | null
+          next_run_at?: string | null
+          opportunities_queued?: number | null
+          phase?: Database["public"]["Enums"]["agent_phase"] | null
+          updated_at?: string | null
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string | null
+          error_count?: number | null
+          id?: string
+          last_error?: string | null
+          last_run_at?: string | null
+          metrics?: Json | null
+          next_run_at?: string | null
+          opportunities_queued?: number | null
+          phase?: Database["public"]["Enums"]["agent_phase"] | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_state_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: true
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaigns: {
+        Row: {
+          budget: number | null
+          channels: Json
+          created_at: string | null
+          goals: Json
+          id: string
+          name: string
+          product: string
+          schedule_interval: string | null
+          status: Database["public"]["Enums"]["campaign_status"] | null
+          updated_at: string | null
+        }
+        Insert: {
+          budget?: number | null
+          channels?: Json
+          created_at?: string | null
+          goals?: Json
+          id?: string
+          name: string
+          product: string
+          schedule_interval?: string | null
+          status?: Database["public"]["Enums"]["campaign_status"] | null
+          updated_at?: string | null
+        }
+        Update: {
+          budget?: number | null
+          channels?: Json
+          created_at?: string | null
+          goals?: Json
+          id?: string
+          name?: string
+          product?: string
+          schedule_interval?: string | null
+          status?: Database["public"]["Enums"]["campaign_status"] | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      marketing_tactics: {
+        Row: {
+          campaign_id: string
+          content: string
+          created_at: string | null
+          estimated_impact: string | null
+          executed: boolean | null
+          id: string
+          platform: string
+          priority: number | null
+          tactic_type: string
+          target_audience: string | null
+        }
+        Insert: {
+          campaign_id: string
+          content: string
+          created_at?: string | null
+          estimated_impact?: string | null
+          executed?: boolean | null
+          id?: string
+          platform: string
+          priority?: number | null
+          tactic_type: string
+          target_audience?: string | null
+        }
+        Update: {
+          campaign_id?: string
+          content?: string
+          created_at?: string | null
+          estimated_impact?: string | null
+          executed?: boolean | null
+          id?: string
+          platform?: string
+          priority?: number | null
+          tactic_type?: string
+          target_audience?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_tactics_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      research_findings: {
+        Row: {
+          campaign_id: string
+          content: string | null
+          created_at: string | null
+          finding_type: string
+          id: string
+          processed: boolean | null
+          relevance_score: number | null
+          source_url: string | null
+          title: string
+        }
+        Insert: {
+          campaign_id: string
+          content?: string | null
+          created_at?: string | null
+          finding_type: string
+          id?: string
+          processed?: boolean | null
+          relevance_score?: number | null
+          source_url?: string | null
+          title: string
+        }
+        Update: {
+          campaign_id?: string
+          content?: string | null
+          created_at?: string | null
+          finding_type?: string
+          id?: string
+          processed?: boolean | null
+          relevance_score?: number | null
+          source_url?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "research_findings_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +299,15 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      action_status: "pending" | "completed" | "failed" | "queued"
+      agent_phase:
+        | "idle"
+        | "research"
+        | "planning"
+        | "execution"
+        | "evaluation"
+        | "error"
+      campaign_status: "active" | "paused" | "completed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +434,17 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      action_status: ["pending", "completed", "failed", "queued"],
+      agent_phase: [
+        "idle",
+        "research",
+        "planning",
+        "execution",
+        "evaluation",
+        "error",
+      ],
+      campaign_status: ["active", "paused", "completed"],
+    },
   },
 } as const

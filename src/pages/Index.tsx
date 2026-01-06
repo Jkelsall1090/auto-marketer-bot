@@ -19,10 +19,10 @@ import {
 
 const mockCampaigns = [
   {
-    name: "MyApp Launch",
-    product: "Mobile task management tool with AI features",
+    name: "AirportBuddy Launch",
+    product: "Mobile app providing real-time TSA wait times, flight status updates, and airport info for stress-free travel",
     status: "active" as const,
-    channels: ["Twitter", "Reddit", "LinkedIn"],
+    channels: ["Twitter", "Reddit", "TikTok"],
     metrics: {
       impressions: 45200,
       clicks: 1840,
