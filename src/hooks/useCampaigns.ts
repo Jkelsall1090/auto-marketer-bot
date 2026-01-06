@@ -92,9 +92,9 @@ export function useRunAgent() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ campaignId, phase, platform }: { campaignId: string; phase?: string; platform?: string }) => {
+    mutationFn: async ({ campaignId, phase, platform, quantity }: { campaignId: string; phase?: string; platform?: string; quantity?: number }) => {
       const { data, error } = await supabase.functions.invoke("agent-run", {
-        body: { campaign_id: campaignId, phase, platform },
+        body: { campaign_id: campaignId, phase, platform, quantity },
       });
 
       if (error) throw error;

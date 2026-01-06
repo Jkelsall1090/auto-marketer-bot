@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { campaign_id, phase, platform } = await req.json();
+    const { campaign_id, phase, platform, quantity } = await req.json();
     
     if (!campaign_id) {
       return new Response(
@@ -21,7 +21,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Agent run started for campaign ${campaign_id}, platform: ${platform || 'all'}`);
+    console.log(`Agent run started for campaign ${campaign_id}, platform: ${platform || 'all'}, quantity: ${quantity || 10}`);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -101,7 +101,7 @@ serve(async (req) => {
             'Authorization': `Bearer ${supabaseKey}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ campaign_id, platform }),
+          body: JSON.stringify({ campaign_id, platform, quantity }),
         });
         
         const contentData = await contentResponse.json();
