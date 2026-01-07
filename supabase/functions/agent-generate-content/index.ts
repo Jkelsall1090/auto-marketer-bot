@@ -64,6 +64,53 @@ serve(async (req) => {
         .or('source_url.ilike.%twitter.com%/status/%,source_url.ilike.%x.com%/status/%')
         .order('relevance_score', { ascending: false })
         .limit(maxPosts + 5);
+    } else if (targetPlatform === 'craigslist') {
+      // For Craigslist, filter by craigslist URLs
+      findingsQuery = supabase
+        .from('research_findings')
+        .select('*')
+        .eq('campaign_id', campaign_id)
+        .eq('processed', false)
+        .ilike('source_url', '%craigslist%')
+        .order('relevance_score', { ascending: false })
+        .limit(maxPosts + 5);
+    } else if (targetPlatform === 'nextdoor') {
+      // For Nextdoor, filter by nextdoor URLs
+      findingsQuery = supabase
+        .from('research_findings')
+        .select('*')
+        .eq('campaign_id', campaign_id)
+        .eq('processed', false)
+        .ilike('source_url', '%nextdoor%')
+        .order('relevance_score', { ascending: false })
+        .limit(maxPosts + 5);
+    } else if (targetPlatform === 'reddit') {
+      findingsQuery = supabase
+        .from('research_findings')
+        .select('*')
+        .eq('campaign_id', campaign_id)
+        .eq('processed', false)
+        .ilike('source_url', '%reddit%')
+        .order('relevance_score', { ascending: false })
+        .limit(maxPosts + 5);
+    } else if (targetPlatform === 'linkedin') {
+      findingsQuery = supabase
+        .from('research_findings')
+        .select('*')
+        .eq('campaign_id', campaign_id)
+        .eq('processed', false)
+        .ilike('source_url', '%linkedin%')
+        .order('relevance_score', { ascending: false })
+        .limit(maxPosts + 5);
+    } else if (targetPlatform === 'facebook') {
+      findingsQuery = supabase
+        .from('research_findings')
+        .select('*')
+        .eq('campaign_id', campaign_id)
+        .eq('processed', false)
+        .ilike('source_url', '%facebook%')
+        .order('relevance_score', { ascending: false })
+        .limit(maxPosts + 5);
     } else {
       // General query for all findings
       findingsQuery = supabase
