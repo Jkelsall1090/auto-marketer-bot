@@ -286,12 +286,21 @@ serve(async (req) => {
 
           tweetsPosted++;
 
-          // Add delay between tweets to avoid rate limits (2 seconds)
+          // Add longer delay between tweets to avoid rate limits (15 seconds for free tier)
           if (tactics.indexOf(tactic) < tactics.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            console.log('Waiting 15 seconds before next tweet to avoid rate limits...');
+            await new Promise(resolve => setTimeout(resolve, 15000));
           }
         } catch (err: any) {
           console.error(`Failed to post tweet: ${err.message}`);
+          
+          // If rate limited, stop trying more tweets this run
+          if (err.message.includes('429')) {
+            console.log('Rate limited by Twitter - stopping this run. Try again later.');
+            errors.push({ tactic_id: tactic.id, error: 'Rate limited - will retry later' });
+            break; // Exit the loop, don't try more tweets
+          }
+          
           errors.push({ tactic_id: tactic.id, error: err.message });
         }
       }
