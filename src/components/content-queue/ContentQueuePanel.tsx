@@ -337,7 +337,7 @@ export function ContentQueuePanel() {
                           className="text-primary hover:underline flex items-center gap-1 text-sm"
                         >
                           <ExternalLink className="h-4 w-4" />
-                          View Tweet
+                          View {action.platform === 'twitter' ? 'Tweet' : 'Post'}
                         </a>
                       )}
                     </div>
