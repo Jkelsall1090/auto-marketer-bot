@@ -127,6 +127,20 @@ serve(async (req) => {
         'site:twitter.com OR site:x.com coloring pages kids free',
         'site:twitter.com OR site:x.com "summer activities" kids bored',
       ];
+    } else if (productLower.includes('cover letter') || productLower.includes('coverletter')) {
+      // CoverLetterAI campaign queries - job seekers and career discussions
+      searchQueries = [
+        'site:twitter.com OR site:x.com "writing cover letter" help',
+        'site:twitter.com OR site:x.com "cover letter tips"',
+        'site:twitter.com OR site:x.com "job application" frustrated',
+        'site:twitter.com OR site:x.com "applying for jobs" tired',
+        'site:twitter.com OR site:x.com "hate writing" cover letter',
+        'site:twitter.com OR site:x.com "job hunt" advice',
+        'site:twitter.com OR site:x.com "resume and cover letter"',
+        'site:twitter.com OR site:x.com "how to write" cover letter',
+        'site:twitter.com OR site:x.com "job search" struggling',
+        'site:twitter.com OR site:x.com "career change" application',
+      ];
     } else {
       // Generic product queries
       searchQueries = [
