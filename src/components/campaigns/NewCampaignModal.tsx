@@ -22,12 +22,12 @@ interface CampaignFormData {
 }
 
 const availableChannels = [
-  { id: "twitter", name: "Twitter/X", icon: "𝕏" },
-  { id: "reddit", name: "Reddit", icon: "🔥" },
-  { id: "linkedin", name: "LinkedIn", icon: "in" },
-  { id: "email", name: "Email", icon: "✉️" },
-  { id: "youtube", name: "YouTube", icon: "▶️" },
-  { id: "instagram", name: "Instagram", icon: "📷" },
+  { id: "twitter", name: "Twitter/X", icon: "𝕏", autoPost: true },
+  { id: "craigslist", name: "Craigslist", icon: "📋", autoPost: false },
+  { id: "nextdoor", name: "Nextdoor", icon: "🏘️", autoPost: false },
+  { id: "reddit", name: "Reddit", icon: "🔥", autoPost: false },
+  { id: "linkedin", name: "LinkedIn", icon: "in", autoPost: false },
+  { id: "facebook", name: "Facebook", icon: "📘", autoPost: false },
 ];
 
 const scheduleOptions = [
@@ -196,14 +196,22 @@ export function NewCampaignModal({ isOpen, onClose, onSubmit }: NewCampaignModal
                   type="button"
                   onClick={() => toggleChannel(channel.id)}
                   className={cn(
-                    "flex items-center gap-2 rounded-lg border p-3 text-left transition-all",
+                    "flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-all",
                     formData.channels.includes(channel.id)
                       ? "border-primary bg-primary/10 text-foreground"
                       : "border-border bg-secondary hover:border-primary/50"
                   )}
                 >
-                  <span className="text-lg">{channel.icon}</span>
-                  <span className="text-sm font-medium">{channel.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{channel.icon}</span>
+                    <span className="text-sm font-medium">{channel.name}</span>
+                  </div>
+                  <span className={cn(
+                    "text-xs",
+                    channel.autoPost ? "text-green-500" : "text-muted-foreground"
+                  )}>
+                    {channel.autoPost ? "Auto-post" : "Manual post"}
+                  </span>
                 </button>
               ))}
             </div>
