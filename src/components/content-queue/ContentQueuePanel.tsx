@@ -24,6 +24,8 @@ const platformIcons: Record<string, string> = {
   twitter: "🐦",
   tiktok: "🎵",
   instagram: "📸",
+  craigslist: "📋",
+  nextdoor: "🏠",
   general: "💬",
 };
 
@@ -33,6 +35,8 @@ const platformColors: Record<string, string> = {
   twitter: "bg-sky-500/10 text-sky-500 border-sky-500/20",
   tiktok: "bg-pink-500/10 text-pink-500 border-pink-500/20",
   instagram: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+  craigslist: "bg-violet-500/10 text-violet-500 border-violet-500/20",
+  nextdoor: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
   general: "bg-muted text-muted-foreground border-border",
 };
 
@@ -147,6 +151,8 @@ const platformOptions = [
   { value: "twitter", label: "Twitter", icon: "🐦" },
   { value: "reddit", label: "Reddit", icon: "🔴" },
   { value: "facebook", label: "Facebook", icon: "📘" },
+  { value: "craigslist", label: "Craigslist", icon: "📋" },
+  { value: "nextdoor", label: "Nextdoor", icon: "🏠" },
   { value: "instagram", label: "Instagram", icon: "📸" },
   { value: "tiktok", label: "TikTok", icon: "🎵" },
 ];
