@@ -1,4 +1,3 @@
-import { createHmac } from "node:crypto";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.89.0";
 
@@ -7,72 +6,149 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const API_KEY = Deno.env.get("TWITTER_CONSUMER_KEY")?.trim();
-const API_SECRET = Deno.env.get("TWITTER_CONSUMER_SECRET")?.trim();
-const ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
-const ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
-
-function generateOAuthSignature(
-  method: string,
-  url: string,
-  params: Record<string, string>,
-  consumerSecret: string,
-  tokenSecret: string
-): string {
-  const signatureBaseString = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(
-    Object.entries(params).sort().map(([k, v]) => `${k}=${v}`).join("&")
-  )}`;
-  const signingKey = `${encodeURIComponent(consumerSecret)}&${encodeURIComponent(tokenSecret)}`;
-  const hmacSha1 = createHmac("sha1", signingKey);
-  return hmacSha1.update(signatureBaseString).digest("base64");
+interface TweetMetrics {
+  likes: number;
+  retweets: number;
+  replies: number;
+  views: number;
 }
 
-function generateOAuthHeader(method: string, url: string): string {
-  const oauthParams = {
-    oauth_consumer_key: API_KEY!,
-    oauth_nonce: Math.random().toString(36).substring(2),
-    oauth_signature_method: "HMAC-SHA1",
-    oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
-    oauth_token: ACCESS_TOKEN!,
-    oauth_version: "1.0",
+// Scrape tweet page using Firecrawl to extract metrics
+async function scrapeTweetMetrics(tweetUrl: string, apiKey: string): Promise<TweetMetrics | null> {
+  try {
+    console.log('Scraping metrics from:', tweetUrl);
+    
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: tweetUrl,
+        formats: ['markdown', 'html'],
+        onlyMainContent: false,
+        waitFor: 2000, // Wait for dynamic content to load
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('Firecrawl error:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const html = data.data?.html || data.html || '';
+    const markdown = data.data?.markdown || data.markdown || '';
+    
+    // Parse metrics from the scraped content
+    const metrics = parseMetricsFromContent(html, markdown);
+    console.log('Parsed metrics:', metrics);
+    
+    return metrics;
+  } catch (error) {
+    console.error('Error scraping tweet:', error);
+    return null;
+  }
+}
+
+// Parse engagement metrics from scraped HTML/markdown content
+function parseMetricsFromContent(html: string, markdown: string): TweetMetrics {
+  const metrics: TweetMetrics = {
+    likes: 0,
+    retweets: 0,
+    replies: 0,
+    views: 0,
   };
 
-  const signature = generateOAuthSignature(method, url, oauthParams, API_SECRET!, ACCESS_TOKEN_SECRET!);
-  const signedOAuthParams = { ...oauthParams, oauth_signature: signature };
-
-  return "OAuth " + Object.entries(signedOAuthParams)
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([k, v]) => `${encodeURIComponent(k)}="${encodeURIComponent(v)}"`)
-    .join(", ");
-}
-
-async function getTweetMetrics(tweetIds: string[]): Promise<any> {
-  if (!tweetIds.length) return { data: [] };
+  // Common patterns for extracting metrics from Twitter/X pages
+  // These patterns may need adjustment as Twitter changes their HTML
   
-  // Twitter API allows up to 100 tweet IDs per request
-  const ids = tweetIds.slice(0, 100).join(',');
-  const baseUrl = "https://api.x.com/2/tweets";
-  const queryParams = `ids=${ids}&tweet.fields=public_metrics,created_at`;
-  const fullUrl = `${baseUrl}?${queryParams}`;
+  // Try to find likes (heart icon followed by number)
+  const likesPatterns = [
+    /(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)\s*(?:Likes?|likes?)/i,
+    /aria-label="(\d+(?:,\d+)*)\s*Likes?"/i,
+    /data-testid="like"[^>]*>.*?(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)/is,
+  ];
   
-  const oauthHeader = generateOAuthHeader("GET", baseUrl);
+  // Try to find retweets
+  const retweetsPatterns = [
+    /(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)\s*(?:Retweets?|reposts?|Reposts?)/i,
+    /aria-label="(\d+(?:,\d+)*)\s*(?:Retweets?|Reposts?)"/i,
+    /data-testid="retweet"[^>]*>.*?(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)/is,
+  ];
+  
+  // Try to find replies
+  const repliesPatterns = [
+    /(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)\s*(?:Replies|replies|Comments?)/i,
+    /aria-label="(\d+(?:,\d+)*)\s*(?:Replies|Reply)"/i,
+    /data-testid="reply"[^>]*>.*?(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)/is,
+  ];
+  
+  // Try to find views
+  const viewsPatterns = [
+    /(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)\s*(?:Views?|views?|impressions?)/i,
+    /aria-label="(\d+(?:,\d+)*)\s*Views?"/i,
+  ];
 
-  const response = await fetch(fullUrl, {
-    method: "GET",
-    headers: {
-      Authorization: oauthHeader,
-    },
-  });
+  const content = html + ' ' + markdown;
 
-  const responseText = await response.text();
-  console.log("Twitter metrics response:", response.status);
-
-  if (!response.ok) {
-    console.error("Twitter API error:", responseText);
-    return { data: [], error: responseText };
+  // Extract likes
+  for (const pattern of likesPatterns) {
+    const match = content.match(pattern);
+    if (match) {
+      metrics.likes = parseMetricValue(match[1]);
+      break;
+    }
   }
 
-  return JSON.parse(responseText);
+  // Extract retweets
+  for (const pattern of retweetsPatterns) {
+    const match = content.match(pattern);
+    if (match) {
+      metrics.retweets = parseMetricValue(match[1]);
+      break;
+    }
+  }
+
+  // Extract replies
+  for (const pattern of repliesPatterns) {
+    const match = content.match(pattern);
+    if (match) {
+      metrics.replies = parseMetricValue(match[1]);
+      break;
+    }
+  }
+
+  // Extract views
+  for (const pattern of viewsPatterns) {
+    const match = content.match(pattern);
+    if (match) {
+      metrics.views = parseMetricValue(match[1]);
+      break;
+    }
+  }
+
+  return metrics;
+}
+
+// Convert string like "1.2K" or "1,234" to number
+function parseMetricValue(value: string): number {
+  if (!value) return 0;
+  
+  const cleaned = value.replace(/,/g, '').trim();
+  
+  if (cleaned.endsWith('K') || cleaned.endsWith('k')) {
+    return Math.round(parseFloat(cleaned.slice(0, -1)) * 1000);
+  }
+  if (cleaned.endsWith('M') || cleaned.endsWith('m')) {
+    return Math.round(parseFloat(cleaned.slice(0, -1)) * 1000000);
+  }
+  if (cleaned.endsWith('B') || cleaned.endsWith('b')) {
+    return Math.round(parseFloat(cleaned.slice(0, -1)) * 1000000000);
+  }
+  
+  return parseInt(cleaned, 10) || 0;
 }
 
 serve(async (req) => {
@@ -82,15 +158,23 @@ serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY');
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
     let campaignId: string | null = null;
+    let maxTweets = 10; // Limit to avoid too many Firecrawl requests
+    
     try {
       const body = await req.json();
       campaignId = body.campaign_id || null;
+      maxTweets = body.max_tweets || 10;
     } catch {
       // No body provided
+    }
+
+    if (!firecrawlApiKey) {
+      console.warn('FIRECRAWL_API_KEY not configured - returning stored metrics only');
     }
 
     // Get posted Twitter actions
@@ -132,112 +216,96 @@ serve(async (req) => {
       );
     }
 
-    // Extract tweet IDs from URLs
-    const tweetIds: string[] = [];
-    const actionMap: Record<string, any> = {};
-    
-    for (const action of actions) {
-      if (action.url) {
-        // Extract tweet ID from URL like https://twitter.com/i/web/status/123456789
-        const match = action.url.match(/status\/(\d+)/);
-        if (match) {
-          tweetIds.push(match[1]);
-          actionMap[match[1]] = action;
-        }
-      }
-    }
-
-    console.log(`Fetching metrics for ${tweetIds.length} tweets`);
-
-    // Fetch metrics from Twitter API
-    let twitterData: any = { data: [] };
-    if (tweetIds.length > 0 && API_KEY && API_SECRET && ACCESS_TOKEN && ACCESS_TOKEN_SECRET) {
-      twitterData = await getTweetMetrics(tweetIds);
-    }
-
     // Aggregate metrics
     let totalImpressions = 0;
     let totalLikes = 0;
     let totalRetweets = 0;
     let totalReplies = 0;
-    let totalClicks = 0;
 
     const tweetsWithMetrics: any[] = [];
+    let scrapedCount = 0;
 
-    if (twitterData.data) {
-      for (const tweet of twitterData.data) {
-        const metrics = tweet.public_metrics || {};
-        const action = actionMap[tweet.id];
+    // Process actions and scrape metrics using Firecrawl
+    for (const action of actions) {
+      if (!action.url) continue;
+      
+      const tweetIdMatch = action.url.match(/status\/(\d+)/);
+      if (!tweetIdMatch) continue;
+      
+      const tweetId = tweetIdMatch[1];
+      let metrics: TweetMetrics | null = null;
 
-        totalImpressions += metrics.impression_count || 0;
-        totalLikes += metrics.like_count || 0;
-        totalRetweets += metrics.retweet_count || 0;
-        totalReplies += metrics.reply_count || 0;
-        // Note: Click data requires Twitter Analytics API (paid tier)
-
-        tweetsWithMetrics.push({
-          tweet_id: tweet.id,
-          content: action?.content?.substring(0, 100) + '...',
-          posted_at: action?.executed_at,
-          impressions: metrics.impression_count || 0,
-          likes: metrics.like_count || 0,
-          retweets: metrics.retweet_count || 0,
-          replies: metrics.reply_count || 0,
-          url: action?.url,
-        });
-
-        // Update action with engagement count
-        if (action) {
-          const engagement = (metrics.like_count || 0) + (metrics.retweet_count || 0) + (metrics.reply_count || 0);
-          await supabase
-            .from('actions_taken')
-            .update({ 
-              engagement_count: engagement,
-              click_count: metrics.impression_count || 0, // Using impressions as proxy
-            })
-            .eq('id', action.id);
+      // Scrape fresh metrics if Firecrawl is configured and under limit
+      if (firecrawlApiKey && scrapedCount < maxTweets) {
+        // Convert URL to x.com format for consistency
+        const scrapableUrl = action.url.replace('twitter.com', 'x.com');
+        metrics = await scrapeTweetMetrics(scrapableUrl, firecrawlApiKey);
+        scrapedCount++;
+        
+        // Add small delay between requests to avoid rate limiting
+        if (scrapedCount < maxTweets && scrapedCount < actions.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
-    }
 
-    // Also include actions without Twitter API data (using stored engagement counts)
-    for (const action of actions) {
-      const tweetId = action.url?.match(/status\/(\d+)/)?.[1];
-      if (tweetId && !tweetsWithMetrics.find(t => t.tweet_id === tweetId)) {
-        tweetsWithMetrics.push({
-          tweet_id: tweetId,
-          content: action.content?.substring(0, 100) + '...',
-          posted_at: action.executed_at,
-          impressions: action.click_count || 0,
-          likes: 0,
-          retweets: 0,
-          replies: 0,
-          engagement: action.engagement_count || 0,
-          url: action.url,
-        });
-        totalClicks += action.click_count || 0;
+      // Use scraped metrics or fall back to stored values
+      const likes = metrics?.likes || 0;
+      const retweets = metrics?.retweets || 0;
+      const replies = metrics?.replies || 0;
+      const views = metrics?.views || action.click_count || 0;
+
+      totalLikes += likes;
+      totalRetweets += retweets;
+      totalReplies += replies;
+      totalImpressions += views;
+
+      tweetsWithMetrics.push({
+        tweet_id: tweetId,
+        content: action.content?.substring(0, 100) + '...',
+        posted_at: action.executed_at,
+        impressions: views,
+        likes: likes,
+        retweets: retweets,
+        replies: replies,
+        engagement: likes + retweets + replies,
+        url: action.url,
+        scraped: !!metrics,
+      });
+
+      // Update action with fresh engagement count if we got metrics
+      if (metrics) {
+        const engagement = likes + retweets + replies;
+        await supabase
+          .from('actions_taken')
+          .update({ 
+            engagement_count: engagement,
+            click_count: views,
+          })
+          .eq('id', action.id);
       }
     }
 
-    const metrics = {
+    const totalEngagement = totalLikes + totalRetweets + totalReplies;
+    const metricsResult = {
       total_tweets: actions.length,
       total_impressions: totalImpressions,
       total_likes: totalLikes,
       total_retweets: totalRetweets,
       total_replies: totalReplies,
-      total_engagement: totalLikes + totalRetweets + totalReplies,
+      total_engagement: totalEngagement,
       engagement_rate: totalImpressions > 0 
-        ? ((totalLikes + totalRetweets + totalReplies) / totalImpressions * 100).toFixed(2)
+        ? ((totalEngagement) / totalImpressions * 100).toFixed(2)
         : 0,
+      scraped_count: scrapedCount,
     };
 
-    console.log('Metrics aggregated:', metrics);
+    console.log('Metrics aggregated:', metricsResult);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        metrics,
-        tweets: tweetsWithMetrics.slice(0, 20), // Return top 20 tweets
+        metrics: metricsResult,
+        tweets: tweetsWithMetrics.slice(0, 20),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
