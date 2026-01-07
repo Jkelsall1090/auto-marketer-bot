@@ -100,58 +100,89 @@ serve(async (req) => {
 
     const findings: any[] = [];
     
-    // Generate campaign-specific search queries based on product
+    // Get campaign channels (defaults to twitter if not set)
+    const campaignChannels: string[] = Array.isArray(campaign.channels) ? campaign.channels : ['twitter'];
+    console.log(`Campaign channels: ${campaignChannels.join(', ')}`);
+    
+    // Generate campaign-specific search queries based on product and channels
     const productLower = campaign.product.toLowerCase();
+    
+    // Build site filters based on channels
+    const buildSiteFilter = (channels: string[]) => {
+      const siteFilters: string[] = [];
+      if (channels.includes('twitter')) {
+        siteFilters.push('site:twitter.com', 'site:x.com');
+      }
+      if (channels.includes('craigslist')) {
+        siteFilters.push('site:craigslist.org');
+      }
+      if (channels.includes('nextdoor')) {
+        siteFilters.push('site:nextdoor.com');
+      }
+      if (channels.includes('reddit')) {
+        siteFilters.push('site:reddit.com');
+      }
+      if (channels.includes('facebook')) {
+        siteFilters.push('site:facebook.com');
+      }
+      // Default to Twitter if no channels specified
+      if (siteFilters.length === 0) {
+        siteFilters.push('site:twitter.com', 'site:x.com');
+      }
+      return siteFilters.join(' OR ');
+    };
+    
+    const siteFilter = buildSiteFilter(campaignChannels);
     let searchQueries: string[] = [];
     
     if (productLower.includes('airport') || productLower.includes('travel') || productLower.includes('buddy')) {
       // AirportBuddy campaign queries
       searchQueries = [
-        'site:twitter.com OR site:x.com TSA wait times',
-        'site:twitter.com OR site:x.com airport security line long',
-        'site:twitter.com OR site:x.com airport delay security',
-        'site:twitter.com OR site:x.com "how early" airport flight',
-        'site:twitter.com OR site:x.com airport tips travel',
+        `${siteFilter} TSA wait times`,
+        `${siteFilter} airport security line long`,
+        `${siteFilter} airport delay security`,
+        `${siteFilter} "how early" airport flight`,
+        `${siteFilter} airport tips travel`,
       ];
     } else if (productLower.includes('etsy') || productLower.includes('coloring') || productLower.includes('kids') || productLower.includes('prompted')) {
-      // Etsy Kids Digital Downloads campaign queries - broader and more varied
+      // Etsy Kids Digital Downloads campaign queries
       searchQueries = [
-        'site:twitter.com OR site:x.com "keep kids busy"',
-        'site:twitter.com OR site:x.com "toddler bored" activities',
-        'site:twitter.com OR site:x.com "rainy day" kids indoor',
-        'site:twitter.com OR site:x.com "screen free" activities kids',
-        'site:twitter.com OR site:x.com preschool homeschool activities',
-        'site:twitter.com OR site:x.com "kids crafts" printable',
-        'site:twitter.com OR site:x.com "quiet time" toddler activities',
-        'site:twitter.com OR site:x.com "what to do" kids home',
-        'site:twitter.com OR site:x.com coloring pages kids free',
-        'site:twitter.com OR site:x.com "summer activities" kids bored',
+        `${siteFilter} "keep kids busy"`,
+        `${siteFilter} "toddler bored" activities`,
+        `${siteFilter} "rainy day" kids indoor`,
+        `${siteFilter} "screen free" activities kids`,
+        `${siteFilter} preschool homeschool activities`,
+        `${siteFilter} "kids crafts" printable`,
+        `${siteFilter} "quiet time" toddler activities`,
+        `${siteFilter} "what to do" kids home`,
+        `${siteFilter} coloring pages kids`,
+        `${siteFilter} "summer activities" kids`,
       ];
     } else if (productLower.includes('cover letter') || productLower.includes('coverletter')) {
       // CoverLetterAI campaign queries - job seekers and career discussions
       searchQueries = [
-        'site:twitter.com OR site:x.com "writing cover letter" help',
-        'site:twitter.com OR site:x.com "cover letter tips"',
-        'site:twitter.com OR site:x.com "job application" frustrated',
-        'site:twitter.com OR site:x.com "applying for jobs" tired',
-        'site:twitter.com OR site:x.com "hate writing" cover letter',
-        'site:twitter.com OR site:x.com "job hunt" advice',
-        'site:twitter.com OR site:x.com "resume and cover letter"',
-        'site:twitter.com OR site:x.com "how to write" cover letter',
-        'site:twitter.com OR site:x.com "job search" struggling',
-        'site:twitter.com OR site:x.com "career change" application',
+        `${siteFilter} "writing cover letter" help`,
+        `${siteFilter} "cover letter tips"`,
+        `${siteFilter} "job application" frustrated`,
+        `${siteFilter} "applying for jobs" tired`,
+        `${siteFilter} "hate writing" cover letter`,
+        `${siteFilter} "job hunt" advice`,
+        `${siteFilter} "resume and cover letter"`,
+        `${siteFilter} "how to write" cover letter`,
+        `${siteFilter} "job search" struggling`,
+        `${siteFilter} "career change" application`,
       ];
     } else {
       // Generic product queries
       searchQueries = [
-        `site:twitter.com OR site:x.com ${campaign.product}`,
+        `${siteFilter} ${campaign.product}`,
       ];
     }
     
     console.log(`Using ${searchQueries.length} search queries for campaign: ${campaign.name}`);
 
     if (firecrawlApiKey) {
-      console.log('Using Firecrawl to search for Twitter content');
+      console.log(`Searching across: ${siteFilter}`);
       
       for (const query of searchQueries) {
         try {
@@ -159,23 +190,46 @@ serve(async (req) => {
           
           for (const result of results) {
             const url = result.url || '';
-            const tweetId = extractTweetId(url);
             
-            // Only include actual Twitter/X URLs with valid tweet IDs
-            if (tweetId && (url.includes('twitter.com') || url.includes('x.com'))) {
-              // Normalize URL format
-              const normalizedUrl = `https://x.com/i/web/status/${tweetId}`;
-              
-              findings.push({
-                campaign_id,
-                title: `Tweet: ${(result.title || result.description || '').substring(0, 50)}...`,
-                finding_type: 'twitter_opportunity',
-                source_url: normalizedUrl,
-                content: result.description || result.title || '',
-                relevance_score: 8,
-                processed: false,
-              });
+            // Determine platform and finding type from URL
+            let findingType = 'general_opportunity';
+            let title = '';
+            let normalizedUrl = url;
+            
+            if (url.includes('twitter.com') || url.includes('x.com')) {
+              const tweetId = extractTweetId(url);
+              if (tweetId) {
+                normalizedUrl = `https://x.com/i/web/status/${tweetId}`;
+                findingType = 'twitter_opportunity';
+                title = `Tweet: ${(result.title || result.description || '').substring(0, 50)}...`;
+              } else {
+                continue; // Skip Twitter URLs without valid tweet IDs
+              }
+            } else if (url.includes('craigslist.org')) {
+              findingType = 'craigslist_opportunity';
+              title = `Craigslist: ${(result.title || result.description || '').substring(0, 50)}...`;
+            } else if (url.includes('nextdoor.com')) {
+              findingType = 'nextdoor_opportunity';
+              title = `Nextdoor: ${(result.title || result.description || '').substring(0, 50)}...`;
+            } else if (url.includes('reddit.com')) {
+              findingType = 'reddit_opportunity';
+              title = `Reddit: ${(result.title || result.description || '').substring(0, 50)}...`;
+            } else if (url.includes('facebook.com')) {
+              findingType = 'facebook_opportunity';
+              title = `Facebook: ${(result.title || result.description || '').substring(0, 50)}...`;
+            } else {
+              title = `Post: ${(result.title || result.description || '').substring(0, 50)}...`;
             }
+            
+            findings.push({
+              campaign_id,
+              title,
+              finding_type: findingType,
+              source_url: normalizedUrl,
+              content: result.description || result.title || '',
+              relevance_score: 8,
+              processed: false,
+            });
           }
           
           console.log(`Found ${results.length} results for: ${query}`);

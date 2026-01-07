@@ -98,8 +98,11 @@ serve(async (req) => {
       if (u.includes("reddit")) return "reddit";
       if (u.includes("facebook")) return "facebook";
       if (u.includes("twitter") || u.includes("x.com")) return "twitter";
+      if (u.includes("craigslist")) return "craigslist";
+      if (u.includes("nextdoor")) return "nextdoor";
       if (u.includes("tiktok")) return "tiktok";
       if (u.includes("instagram")) return "instagram";
+      if (u.includes("linkedin")) return "linkedin";
       return "general";
     };
 
@@ -187,6 +190,21 @@ serve(async (req) => {
 - Provide genuine value first
 - Naturally mention the product with URL: ${appUrl}
 - Don't be salesy`,
+            craigslist: `Write a helpful Craigslist-style response (200-400 chars).
+- Be direct and practical
+- Reference the specific need in their post
+- Include URL: ${appUrl}
+- Keep it simple and local-feeling`,
+            nextdoor: `Write a friendly Nextdoor neighbor-style comment (200-400 chars).
+- Be warm and helpful like talking to a neighbor
+- Reference local/community context if possible
+- Include URL: ${appUrl}
+- Keep it casual and genuine`,
+            linkedin: `Write a professional LinkedIn comment (200-400 chars).
+- Be thoughtful and professional
+- Add industry insight
+- Include URL: ${appUrl}
+- Avoid being too casual`,
             default: `Write a helpful, natural response.
 - Provide value first
 - Include CTA with URL: ${appUrl}
@@ -276,7 +294,8 @@ Return ONLY the final content text, nothing else.`;
             reddit: `I've been using AirportBuddy for exactly this! It shows real-time TSA wait times so you know exactly when to head to the airport. Saved me from missing a flight last month. Check it out: ${appUrl}`,
             facebook: `Great question! For real-time TSA wait times, I recommend AirportBuddy (${appUrl}) - it's a free web app that shows current wait times at major US airports. Makes travel planning so much easier! 🛫`,
             twitter: `Skip the TSA guessing game ✈️ AirportBuddy shows real-time wait times so you know exactly when to arrive. ${appUrl}`,
-            tiktok: `POV: You stop stressing about TSA lines because AirportBuddy tells you the wait before you leave 🎯 ${appUrl} #traveltok`,
+            craigslist: `If you're flying soon, check out AirportBuddy - free app that shows real-time TSA wait times. Helps you know exactly when to leave: ${appUrl}`,
+            nextdoor: `Hey neighbor! If you're traveling soon, I've found this really helpful - AirportBuddy shows current TSA wait times so you're not guessing: ${appUrl}`,
             general: `For real-time TSA wait times, AirportBuddy is a great free tool covering major US airports: ${appUrl}`,
           };
         } else if (productLower.includes('etsy') || productLower.includes('coloring') || productLower.includes('kids') || productLower.includes('prompted')) {
@@ -285,7 +304,20 @@ Return ONLY the final content text, nothing else.`;
           templates = {
             twitter: `Keeping kids busy? 🎨 Check out these fun coloring & tracing printables - instant download! ${appUrl}`,
             reddit: `My kids love printable activities! We use coloring books and tracing sheets from this Etsy shop - instant downloads so you can print right away: ${appUrl}`,
+            craigslist: `Great printable activities for kids - coloring books and tracing worksheets you can download instantly: ${appUrl}`,
+            nextdoor: `Hey! If you need something to keep the kids busy, I've been using these printable coloring books and tracing sheets - instant download: ${appUrl}`,
             general: `Looking for kids activities? Check out these digital coloring books and tracing worksheets: ${appUrl}`,
+          };
+        } else if (productLower.includes('cover letter') || productLower.includes('coverletter')) {
+          appUrl = 'https://coverletterai.app/?utm_source=twitter';
+          targetAudience = 'job seekers';
+          templates = {
+            twitter: `Writing cover letters is painful 😅 Try CoverLetterAI - generates professional cover letters in seconds: ${appUrl}`,
+            reddit: `I feel you on the cover letter struggle. I've been using CoverLetterAI lately - it generates solid drafts you can customize: ${appUrl}`,
+            craigslist: `If you're job hunting, this might help - CoverLetterAI generates professional cover letters fast: ${appUrl}`,
+            nextdoor: `Hey! Just saw you're job hunting. A neighbor recommended CoverLetterAI to me - makes writing cover letters so much easier: ${appUrl}`,
+            linkedin: `Cover letter writing is one of the most time-consuming parts of job applications. I've found CoverLetterAI helpful for getting solid first drafts: ${appUrl}`,
+            general: `Make cover letter writing easier with CoverLetterAI: ${appUrl}`,
           };
         } else {
           appUrl = campaign.product;
