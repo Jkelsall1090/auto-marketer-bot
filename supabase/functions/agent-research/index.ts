@@ -107,84 +107,90 @@ serve(async (req) => {
     // Generate campaign-specific search queries based on product and channels
     const productLower = campaign.product.toLowerCase();
     
-    // Build site filters based on channels
-    const buildSiteFilter = (channels: string[]) => {
-      const siteFilters: string[] = [];
-      if (channels.includes('twitter')) {
-        siteFilters.push('site:twitter.com', 'site:x.com');
+    // Build per-platform search queries (one query per platform for better results)
+    const getSiteFiltersForChannel = (channel: string): string[] => {
+      switch (channel) {
+        case 'twitter': return ['site:twitter.com OR site:x.com'];
+        case 'craigslist': return ['site:craigslist.org'];
+        case 'nextdoor': return ['site:nextdoor.com'];
+        case 'reddit': return ['site:reddit.com'];
+        case 'facebook': return ['site:facebook.com'];
+        default: return [];
       }
-      if (channels.includes('craigslist')) {
-        siteFilters.push('site:craigslist.org');
-      }
-      if (channels.includes('nextdoor')) {
-        siteFilters.push('site:nextdoor.com');
-      }
-      if (channels.includes('reddit')) {
-        siteFilters.push('site:reddit.com');
-      }
-      if (channels.includes('facebook')) {
-        siteFilters.push('site:facebook.com');
-      }
-      // Default to Twitter if no channels specified
-      if (siteFilters.length === 0) {
-        siteFilters.push('site:twitter.com', 'site:x.com');
-      }
-      return siteFilters.join(' OR ');
     };
     
-    const siteFilter = buildSiteFilter(campaignChannels);
-    let searchQueries: string[] = [];
+    // Get all site filters for selected channels
+    const channelSiteFilters: { channel: string; filter: string }[] = [];
+    for (const channel of campaignChannels) {
+      const filters = getSiteFiltersForChannel(channel);
+      for (const filter of filters) {
+        channelSiteFilters.push({ channel, filter });
+      }
+    }
+    
+    // Default to Twitter if no channels
+    if (channelSiteFilters.length === 0) {
+      channelSiteFilters.push({ channel: 'twitter', filter: 'site:twitter.com OR site:x.com' });
+    }
+    
+    console.log(`Will search ${channelSiteFilters.length} platform filter(s)`);
+    
+    let searchQueries: { query: string; channel: string }[] = [];
+    
+    // Get base query terms based on product
+    let baseQueryTerms: string[] = [];
     
     if (productLower.includes('airport') || productLower.includes('travel') || productLower.includes('buddy')) {
-      // AirportBuddy campaign queries
-      searchQueries = [
-        `${siteFilter} TSA wait times`,
-        `${siteFilter} airport security line long`,
-        `${siteFilter} airport delay security`,
-        `${siteFilter} "how early" airport flight`,
-        `${siteFilter} airport tips travel`,
+      baseQueryTerms = [
+        'TSA wait times',
+        'airport security line long',
+        'airport delay security',
+        '"how early" airport flight',
+        'airport tips travel',
       ];
     } else if (productLower.includes('etsy') || productLower.includes('coloring') || productLower.includes('kids') || productLower.includes('prompted')) {
-      // Etsy Kids Digital Downloads campaign queries
-      searchQueries = [
-        `${siteFilter} "keep kids busy"`,
-        `${siteFilter} "toddler bored" activities`,
-        `${siteFilter} "rainy day" kids indoor`,
-        `${siteFilter} "screen free" activities kids`,
-        `${siteFilter} preschool homeschool activities`,
-        `${siteFilter} "kids crafts" printable`,
-        `${siteFilter} "quiet time" toddler activities`,
-        `${siteFilter} "what to do" kids home`,
-        `${siteFilter} coloring pages kids`,
-        `${siteFilter} "summer activities" kids`,
+      baseQueryTerms = [
+        '"keep kids busy"',
+        '"toddler bored" activities',
+        '"rainy day" kids indoor',
+        '"screen free" activities kids',
+        'preschool homeschool activities',
+        '"kids crafts" printable',
+        '"quiet time" toddler activities',
+        '"what to do" kids home',
+        'coloring pages kids',
+        '"summer activities" kids',
       ];
     } else if (productLower.includes('cover letter') || productLower.includes('coverletter')) {
-      // CoverLetterAI campaign queries - job seekers and career discussions
-      searchQueries = [
-        `${siteFilter} "writing cover letter" help`,
-        `${siteFilter} "cover letter tips"`,
-        `${siteFilter} "job application" frustrated`,
-        `${siteFilter} "applying for jobs" tired`,
-        `${siteFilter} "hate writing" cover letter`,
-        `${siteFilter} "job hunt" advice`,
-        `${siteFilter} "resume and cover letter"`,
-        `${siteFilter} "how to write" cover letter`,
-        `${siteFilter} "job search" struggling`,
-        `${siteFilter} "career change" application`,
+      baseQueryTerms = [
+        '"writing cover letter" help',
+        '"cover letter tips"',
+        '"job application" frustrated',
+        '"applying for jobs" tired',
+        '"hate writing" cover letter',
+        '"job hunt" advice',
+        '"resume and cover letter"',
+        '"how to write" cover letter',
+        '"job search" struggling',
+        '"career change" application',
       ];
     } else {
-      // Generic product queries
-      searchQueries = [
-        `${siteFilter} ${campaign.product}`,
-      ];
+      baseQueryTerms = [campaign.product];
+    }
+    
+    // Build search queries for each channel-filter combo
+    for (const { channel, filter } of channelSiteFilters) {
+      for (const term of baseQueryTerms) {
+        searchQueries.push({ query: `${filter} ${term}`, channel });
+      }
     }
     
     console.log(`Using ${searchQueries.length} search queries for campaign: ${campaign.name}`);
 
     if (firecrawlApiKey) {
-      console.log(`Searching across: ${siteFilter}`);
+      console.log(`Searching across ${channelSiteFilters.length} channel(s): ${campaignChannels.join(', ')}`);
       
-      for (const query of searchQueries) {
+      for (const { query, channel } of searchQueries) {
         try {
           const results = await searchWithFirecrawl(query, firecrawlApiKey, 5);
           
@@ -232,7 +238,7 @@ serve(async (req) => {
             });
           }
           
-          console.log(`Found ${results.length} results for: ${query}`);
+          console.log(`[${channel}] Found ${results.length} results for: ${query}`);
         } catch (err) {
           console.error('Firecrawl search error for query:', query, err);
         }
