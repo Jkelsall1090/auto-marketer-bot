@@ -78,46 +78,46 @@ function ContentCard({ tactic, onCopy, onPost, onSkip }: {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Source Context - What we're responding to */}
-        {/* Only show source link if URL platform matches the tactic platform */}
-        {(() => {
-          const urlPlatform = tactic.source_url?.toLowerCase() || '';
-          const tacticPlatform = tactic.platform.toLowerCase();
-          const urlMatchesPlatform = 
-            (tacticPlatform === 'twitter' && (urlPlatform.includes('twitter.com') || urlPlatform.includes('x.com'))) ||
-            (tacticPlatform === 'reddit' && urlPlatform.includes('reddit.com')) ||
-            (tacticPlatform === 'craigslist' && urlPlatform.includes('craigslist')) ||
-            (tacticPlatform === 'nextdoor' && urlPlatform.includes('nextdoor')) ||
-            (tacticPlatform === 'facebook' && urlPlatform.includes('facebook.com')) ||
-            (tacticPlatform === 'linkedin' && urlPlatform.includes('linkedin.com'));
-          
-          // Only show context section if URL matches platform or for Twitter (reply context)
-          if (!urlMatchesPlatform && !tactic.source_context) return null;
-          
-          return (
-            <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/30 p-3 space-y-2">
-              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                <MessageCircle className="h-3 w-3" />
-                {urlMatchesPlatform ? 'Responding to:' : 'Inspired by:'}
-              </p>
-              {tactic.source_context && (
-                <p className="text-sm text-muted-foreground italic">
-                  "{tactic.source_context}"
-                </p>
-              )}
-              {urlMatchesPlatform && tactic.source_url && (
-                <a 
-                  href={tactic.source_url} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-xs text-primary hover:underline flex items-center gap-1"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  View original post
-                </a>
-              )}
-            </div>
-          );
-        })()}
+        {(tactic.source_url || tactic.source_context) && (
+          <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/30 p-3 space-y-2">
+            {(() => {
+              const urlPlatform = tactic.source_url?.toLowerCase() || '';
+              const tacticPlatform = tactic.platform.toLowerCase();
+              const urlMatchesPlatform = 
+                (tacticPlatform === 'twitter' && (urlPlatform.includes('twitter.com') || urlPlatform.includes('x.com'))) ||
+                (tacticPlatform === 'reddit' && urlPlatform.includes('reddit.com')) ||
+                (tacticPlatform === 'craigslist' && urlPlatform.includes('craigslist')) ||
+                (tacticPlatform === 'nextdoor' && urlPlatform.includes('nextdoor')) ||
+                (tacticPlatform === 'facebook' && urlPlatform.includes('facebook.com')) ||
+                (tacticPlatform === 'linkedin' && urlPlatform.includes('linkedin.com'));
+              
+              return (
+                <>
+                  <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                    <MessageCircle className="h-3 w-3" />
+                    {urlMatchesPlatform ? 'Responding to:' : 'Content inspiration:'}
+                  </p>
+                  {tactic.source_context && (
+                    <p className="text-sm text-muted-foreground italic line-clamp-3">
+                      "{tactic.source_context}"
+                    </p>
+                  )}
+                  {tactic.source_url && (
+                    <a 
+                      href={tactic.source_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      {urlMatchesPlatform ? 'View original post' : 'View source'}
+                    </a>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        )}
 
         {/* Generated response */}
         <div className="rounded-lg bg-secondary/50 p-4 text-sm leading-relaxed">
