@@ -47,21 +47,13 @@ function generateSearchQueries(campaign: any, platform: string): string[] {
   const queries: string[] = [];
   
   if (productLower.includes('cover letter') || productLower.includes('coverletter')) {
-    // CoverLetterAI queries
-    const baseTerms = [
-      'job hunting tips',
-      'resume help needed',
-      'career advice',
-      'job application help',
-      'cover letter writing',
-      'job search struggle',
-      'hiring process tips',
-    ];
-    
+    // CoverLetterAI queries - Nextdoor isn't well-indexed by search engines
+    // so we use broader community/neighborhood-themed job search queries
     if (platform === 'nextdoor') {
-      queries.push('site:nextdoor.com job hunting');
-      queries.push('site:nextdoor.com career advice');
-      queries.push('site:nextdoor.com resume help');
+      queries.push('neighborhood job hunting advice 2024');
+      queries.push('local community career networking tips');
+      queries.push('job seekers community help resume cover letter');
+      queries.push('neighbors helping with job search applications');
     } else if (platform === 'reddit') {
       queries.push('site:reddit.com cover letter help');
       queries.push('site:reddit.com job application advice');
@@ -77,14 +69,15 @@ function generateSearchQueries(campaign: any, platform: string): string[] {
       queries.push('site:facebook.com career advice');
     } else {
       // General search for any platform
-      baseTerms.forEach(term => queries.push(term));
+      queries.push('job hunting tips cover letter');
+      queries.push('resume help job application');
     }
   } else if (productLower.includes('airport') || productLower.includes('travel') || productLower.includes('buddy')) {
-    // AirportBuddy queries
+    // AirportBuddy queries - Nextdoor isn't well-indexed, use broader travel queries
     if (platform === 'nextdoor') {
-      queries.push('site:nextdoor.com airport tips');
-      queries.push('site:nextdoor.com travel advice');
-      queries.push('site:nextdoor.com TSA wait times');
+      queries.push('neighborhood airport travel tips 2024');
+      queries.push('local community travel advice flying');
+      queries.push('neighbors airport recommendations TSA');
     } else if (platform === 'reddit') {
       queries.push('site:reddit.com TSA wait times');
       queries.push('site:reddit.com airport travel tips');
