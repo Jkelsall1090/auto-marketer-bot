@@ -10,6 +10,7 @@ import { NewCampaignModal } from "@/components/campaigns/NewCampaignModal";
 import { SettingsPanel } from "@/components/settings/SettingsPanel";
 import { AnalyticsPanel } from "@/components/analytics/AnalyticsPanel";
 import { ContentQueuePanel } from "@/components/content-queue/ContentQueuePanel";
+import { ProductResearchPanel } from "@/components/product-research/ProductResearchPanel";
 import { useCampaigns, useCreateCampaign } from "@/hooks/useCampaigns";
 import { 
   Users, 
@@ -189,6 +190,9 @@ export default function Index() {
 
       case "content-queue":
         return <ContentQueuePanel />;
+
+      case "product-research":
+        return <ProductResearchPanel />;
 
       case "activity":
         return (
