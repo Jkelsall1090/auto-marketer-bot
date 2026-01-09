@@ -115,6 +115,7 @@ serve(async (req) => {
         case 'nextdoor': return ['site:nextdoor.com'];
         case 'reddit': return ['site:reddit.com'];
         case 'facebook': return ['site:facebook.com'];
+        case 'amazon': return ['site:amazon.com'];
         default: return [];
       }
     };
@@ -137,50 +138,83 @@ serve(async (req) => {
     
     let searchQueries: { query: string; channel: string }[] = [];
     
-    // Get base query terms based on product
-    let baseQueryTerms: string[] = [];
-    
-    if (productLower.includes('airport') || productLower.includes('travel') || productLower.includes('buddy')) {
-      baseQueryTerms = [
-        'TSA wait times',
-        'airport security line long',
-        'airport delay security',
-        '"how early" airport flight',
-        'airport tips travel',
-      ];
-    } else if (productLower.includes('etsy') || productLower.includes('coloring') || productLower.includes('kids') || productLower.includes('prompted')) {
-      baseQueryTerms = [
-        '"keep kids busy"',
-        '"toddler bored" activities',
-        '"rainy day" kids indoor',
-        '"screen free" activities kids',
-        'preschool homeschool activities',
-        '"kids crafts" printable',
-        '"quiet time" toddler activities',
-        '"what to do" kids home',
-        'coloring pages kids',
-        '"summer activities" kids',
-      ];
-    } else if (productLower.includes('cover letter') || productLower.includes('coverletter')) {
-      baseQueryTerms = [
-        '"writing cover letter" help',
-        '"cover letter tips"',
-        '"job application" frustrated',
-        '"applying for jobs" tired',
-        '"hate writing" cover letter',
-        '"job hunt" advice',
-        '"resume and cover letter"',
-        '"how to write" cover letter',
-        '"job search" struggling',
-        '"career change" application',
-      ];
-    } else {
-      baseQueryTerms = [campaign.product];
-    }
+    // Get base query terms based on product and channel type
+    const getBaseQueryTerms = (channel: string): string[] => {
+      // Amazon-specific queries for product research
+      if (channel === 'amazon') {
+        if (productLower.includes('etsy') || productLower.includes('coloring') || productLower.includes('kids') || productLower.includes('prompted')) {
+          return [
+            'best seller kids activity books',
+            'top rated coloring books children',
+            'best kids educational workbooks',
+            'popular preschool activity books',
+            'best seller toddler busy books',
+            'top kids craft kits',
+          ];
+        } else if (productLower.includes('cover letter') || productLower.includes('coverletter')) {
+          return [
+            'best seller resume writing books',
+            'top rated job search guides',
+            'best cover letter books',
+            'career change guide books',
+            'job hunting tips books',
+          ];
+        } else if (productLower.includes('airport') || productLower.includes('travel') || productLower.includes('buddy')) {
+          return [
+            'best seller travel guides',
+            'top rated travel accessories',
+            'best airport travel tips books',
+            'travel hacks guides',
+          ];
+        } else {
+          return [`best seller ${campaign.product}`, `top rated ${campaign.product}`];
+        }
+      }
+      
+      // Social platform queries for lead generation
+      if (productLower.includes('airport') || productLower.includes('travel') || productLower.includes('buddy')) {
+        return [
+          'TSA wait times',
+          'airport security line long',
+          'airport delay security',
+          '"how early" airport flight',
+          'airport tips travel',
+        ];
+      } else if (productLower.includes('etsy') || productLower.includes('coloring') || productLower.includes('kids') || productLower.includes('prompted')) {
+        return [
+          '"keep kids busy"',
+          '"toddler bored" activities',
+          '"rainy day" kids indoor',
+          '"screen free" activities kids',
+          'preschool homeschool activities',
+          '"kids crafts" printable',
+          '"quiet time" toddler activities',
+          '"what to do" kids home',
+          'coloring pages kids',
+          '"summer activities" kids',
+        ];
+      } else if (productLower.includes('cover letter') || productLower.includes('coverletter')) {
+        return [
+          '"writing cover letter" help',
+          '"cover letter tips"',
+          '"job application" frustrated',
+          '"applying for jobs" tired',
+          '"hate writing" cover letter',
+          '"job hunt" advice',
+          '"resume and cover letter"',
+          '"how to write" cover letter',
+          '"job search" struggling',
+          '"career change" application',
+        ];
+      } else {
+        return [campaign.product];
+      }
+    };
     
     // Build search queries for each channel-filter combo
     for (const { channel, filter } of channelSiteFilters) {
-      for (const term of baseQueryTerms) {
+      const terms = getBaseQueryTerms(channel);
+      for (const term of terms) {
         searchQueries.push({ query: `${filter} ${term}`, channel });
       }
     }
@@ -223,6 +257,9 @@ serve(async (req) => {
             } else if (url.includes('facebook.com')) {
               findingType = 'facebook_opportunity';
               title = `Facebook: ${(result.title || result.description || '').substring(0, 50)}...`;
+            } else if (url.includes('amazon.com')) {
+              findingType = 'amazon_product';
+              title = `Amazon: ${(result.title || result.description || '').substring(0, 50)}...`;
             } else {
               title = `Post: ${(result.title || result.description || '').substring(0, 50)}...`;
             }
@@ -289,6 +326,20 @@ serve(async (req) => {
           content: "My daughter needs help with reading. Anyone have recommendations for tutors or educational resources?",
           relevance_score: 8,
           finding_type: 'nextdoor_opportunity',
+        },
+        {
+          title: "Amazon: Best Seller - Kids Activity Book Bundle",
+          source_url: "https://amazon.com/dp/B09SAMPLE1/",
+          content: "Top-rated kids activity book with coloring pages, puzzles, and learning activities. 4.8 stars, 2,500+ reviews.",
+          relevance_score: 9,
+          finding_type: 'amazon_product',
+        },
+        {
+          title: "Amazon: Educational Workbooks for Preschoolers",
+          source_url: "https://amazon.com/dp/B09SAMPLE2/",
+          content: "Bestselling preschool workbook series. Covers letters, numbers, and shapes. Perfect for ages 3-5.",
+          relevance_score: 8,
+          finding_type: 'amazon_product',
         },
       ];
 
