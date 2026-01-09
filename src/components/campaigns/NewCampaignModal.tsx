@@ -23,6 +23,8 @@ interface CampaignFormData {
 
 const availableChannels = [
   { id: "twitter", name: "Twitter/X", icon: "𝕏", autoPost: true },
+  { id: "youtube", name: "YouTube", icon: "▶️", autoPost: false },
+  { id: "email", name: "Email", icon: "✉️", autoPost: false },
   { id: "craigslist", name: "Craigslist", icon: "📋", autoPost: false },
   { id: "nextdoor", name: "Nextdoor", icon: "🏘️", autoPost: false },
   { id: "reddit", name: "Reddit", icon: "🔥", autoPost: false },
