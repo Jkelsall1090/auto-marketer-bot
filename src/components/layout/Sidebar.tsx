@@ -7,7 +7,8 @@ import {
   BarChart3,
   Zap,
   Target,
-  ListTodo
+  ListTodo,
+  ShoppingBag
 } from "lucide-react";
 
 interface SidebarProps {
@@ -19,6 +20,7 @@ const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "campaigns", label: "Campaigns", icon: Rocket },
   { id: "content-queue", label: "Content Queue", icon: ListTodo },
+  { id: "product-research", label: "Product Research", icon: ShoppingBag },
   { id: "activity", label: "Activity Log", icon: Activity },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "settings", label: "Settings", icon: Settings },
