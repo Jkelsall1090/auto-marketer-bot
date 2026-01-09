@@ -278,6 +278,47 @@ serve(async (req) => {
 - Include a clear CTA with the URL: ${appUrl}
 - Use 1-2 relevant emojis max
 - No hashtags cluttering the message`,
+      youtube: `Write YouTube content based on the type requested:
+
+FOR VIDEO SCRIPTS (500-1500 words):
+- Hook in first 5 seconds
+- Clear structure: intro, main points, CTA
+- Conversational but informative tone
+- End with strong CTA mentioning ${appUrl}
+
+FOR TITLES & DESCRIPTIONS:
+- Title: 60 chars max, attention-grabbing, include main keyword
+- Description: 200-500 chars, include ${appUrl} in first 2 lines
+- Add relevant tags/keywords
+- Include timestamps if applicable
+
+FOR COMMENT REPLIES (100-300 chars):
+- Be helpful and engaging
+- Answer the question/add value
+- Naturally mention ${appUrl} when relevant`,
+      email: `Write email marketing content based on the type:
+
+FOR MARKETING EMAILS:
+- Subject line: 50 chars max, compelling, avoid spam triggers
+- Preview text: 90 chars
+- Body: 150-300 words
+- Clear value proposition
+- Single prominent CTA to ${appUrl}
+- Professional but warm tone
+
+FOR NEWSLETTERS:
+- Engaging subject line
+- Mix of value content and product mentions
+- 300-500 words
+- Include ${appUrl} naturally
+- Easy to scan with headers/bullets
+
+FOR COLD OUTREACH:
+- Personalized subject line
+- Short (100-150 words)
+- Focus on their pain point
+- Soft CTA to learn more at ${appUrl}
+- Professional, not pushy`,
       reddit: `Write a helpful, conversational Reddit comment (300-500 chars).
 - Address the specific question/problem
 - Provide genuine value first
@@ -327,10 +368,14 @@ serve(async (req) => {
       );
 
       if (content) {
+        const tacticType = platform === 'reddit' ? 'comment' : 
+                          platform === 'twitter' ? 'tweet' : 
+                          platform === 'youtube' ? 'video_content' :
+                          platform === 'email' ? 'email' : 'post';
         tactics.push({
           campaign_id,
           platform,
-          tactic_type: platform === 'reddit' ? 'comment' : platform === 'twitter' ? 'tweet' : 'post',
+          tactic_type: tacticType,
           content: content.trim(),
           target_audience: targetAudience,
           estimated_impact: finding.relevance_score >= 8 ? 'high' : 'medium',
@@ -441,6 +486,7 @@ function inferPlatform(url?: string | null): string {
   if (u.includes("reddit")) return "reddit";
   if (u.includes("facebook")) return "facebook";
   if (u.includes("twitter") || u.includes("x.com")) return "twitter";
+  if (u.includes("youtube") || u.includes("youtu.be")) return "youtube";
   if (u.includes("craigslist")) return "craigslist";
   if (u.includes("nextdoor")) return "nextdoor";
   if (u.includes("tiktok")) return "tiktok";
@@ -465,6 +511,8 @@ async function generateContent(
     const templates: Record<string, Record<string, string>> = {
       coverletter: {
         twitter: `Writing cover letters is painful 😅 Try CoverLetterAI - generates professional cover letters in seconds: ${appUrl}`,
+        youtube: `🎬 VIDEO SCRIPT: How to Write a Perfect Cover Letter in 60 Seconds\n\n[HOOK] Tired of spending hours on cover letters? Let me show you a game-changer.\n\n[INTRO] Hey everyone! Today I'm showing you how I write perfect cover letters in under a minute using AI.\n\n[MAIN] CoverLetterAI analyzes the job description and creates a tailored cover letter instantly. Just paste the job posting, add your resume, and click generate.\n\n[CTA] Try it free at ${appUrl} - link in description!\n\n---\nTITLE: Write Perfect Cover Letters in 60 Seconds (AI Tool)\nDESCRIPTION: Stop wasting hours on cover letters! CoverLetterAI generates professional, tailored cover letters instantly. Try free: ${appUrl}`,
+        email: `Subject: Stop wasting hours on cover letters\n\nHi there,\n\nWriting cover letters for every job application is exhausting. What if you could generate professional, tailored cover letters in seconds?\n\nCoverLetterAI uses AI to analyze job descriptions and create compelling cover letters that get you noticed.\n\n→ Generate unlimited cover letters\n→ Tailored to each job description\n→ Professional tone, every time\n\nTry it free: ${appUrl}\n\nBest,\nThe CoverLetterAI Team`,
         reddit: `I feel you on the cover letter struggle. I've been using CoverLetterAI lately - it generates solid drafts you can customize: ${appUrl}`,
         craigslist: `If you're job hunting, this might help - CoverLetterAI generates professional cover letters fast: ${appUrl}`,
         nextdoor: `Hey neighbor! Job hunting can be tough. A friend recommended CoverLetterAI to me - makes writing cover letters so much easier: ${appUrl}`,
@@ -474,10 +522,14 @@ async function generateContent(
       },
       airport: {
         twitter: `Skip the TSA guessing game ✈️ AirportBuddy shows real-time wait times so you know exactly when to arrive. ${appUrl}`,
+        youtube: `🎬 VIDEO SCRIPT: Never Miss a Flight Again - Free TSA Wait Time App\n\n[HOOK] What if you knew exactly how long the TSA line would be before you left for the airport?\n\n[INTRO] Hey travelers! Let me show you my secret weapon for stress-free flights.\n\n[MAIN] AirportBuddy shows real-time TSA wait times at every US airport. No more guessing, no more showing up 3 hours early "just in case."\n\n[CTA] Download free at ${appUrl}\n\n---\nTITLE: Free App Shows Real-Time TSA Wait Times ✈️\nDESCRIPTION: Stop guessing! AirportBuddy shows current TSA wait times at US airports. Download free: ${appUrl}`,
+        email: `Subject: Know your TSA wait time before you leave home\n\nHi traveler,\n\nTired of the airport guessing game? Show up too early, you waste hours. Too late, you miss your flight.\n\nAirportBuddy shows real-time TSA wait times at every US airport, so you know exactly when to leave.\n\n✈️ Real-time updates\n✈️ All US airports\n✈️ 100% free\n\nDownload now: ${appUrl}\n\nHappy travels!`,
         nextdoor: `Hey neighbor! If you're traveling soon, I've found this really helpful - AirportBuddy shows current TSA wait times: ${appUrl}`,
         default: `For real-time TSA wait times, AirportBuddy is a great free tool: ${appUrl}`,
       },
       default: {
+        youtube: `🎬 Check out ${product} - Learn more at ${appUrl}`,
+        email: `Subject: Discover ${product}\n\nHi there,\n\nI wanted to share something that might help you: ${product}\n\nLearn more: ${appUrl}\n\nBest regards`,
         default: `Check out ${product}: ${appUrl}`,
       },
     };
@@ -500,18 +552,25 @@ RULES:
 - Be genuinely helpful, not pushy
 - ${guidelines}`;
 
+    const contentType = platform === 'twitter' ? 'tweet (MAX 250 characters including URL!)' : 
+                        platform === 'reddit' ? 'Reddit comment' : 
+                        platform === 'youtube' ? 'YouTube content (video script with title/description OR comment reply based on context)' :
+                        platform === 'email' ? 'email (marketing email, newsletter, or cold outreach based on context)' : 'post';
+    
     const userPrompt = `Generate a ${platform} response for this opportunity:
 
 Title: ${title}
 Context: ${context}
 ${sourceUrl ? `Source: ${sourceUrl}` : ''}
 
-Write a ${platform === 'twitter' ? 'tweet (MAX 250 characters including URL!)' : platform === 'reddit' ? 'Reddit comment' : 'post'} that:
+Write a ${contentType} that:
 1. Addresses a relevant concern or question that people have
 2. Provides helpful value related to ${productDescription}
 3. MUST include ${appUrl} as plain text
 
 ${platform === 'twitter' ? 'IMPORTANT: Keep it SHORT - under 250 chars total!' : ''}
+${platform === 'youtube' ? 'For video scripts, include: HOOK, INTRO, MAIN POINTS, CTA. Also provide TITLE and DESCRIPTION.' : ''}
+${platform === 'email' ? 'Include: Subject line, preview text (optional), body with clear CTA.' : ''}
 
 Return ONLY the final content text, nothing else.`;
 
