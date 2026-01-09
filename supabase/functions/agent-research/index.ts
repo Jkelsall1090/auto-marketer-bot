@@ -276,6 +276,20 @@ serve(async (req) => {
           relevance_score: 10,
           finding_type: 'reddit_opportunity',
         },
+        {
+          title: "Nextdoor: Looking for kid-friendly activities nearby",
+          source_url: "https://nextdoor.com/p/sample789/",
+          content: "New to the neighborhood! Looking for recommendations on activities to keep my kids entertained this summer.",
+          relevance_score: 9,
+          finding_type: 'nextdoor_opportunity',
+        },
+        {
+          title: "Nextdoor: Anyone know good tutors in the area?",
+          source_url: "https://nextdoor.com/p/sample012/",
+          content: "My daughter needs help with reading. Anyone have recommendations for tutors or educational resources?",
+          relevance_score: 8,
+          finding_type: 'nextdoor_opportunity',
+        },
       ];
 
       for (const post of samplePosts) {
