@@ -246,27 +246,42 @@ serve(async (req) => {
     } else {
       console.log('FIRECRAWL_API_KEY not configured, using sample data');
       
-      // Fallback sample tweets for testing
-      const sampleTweets = [
+      // Fallback sample posts for testing (includes Reddit)
+      const samplePosts = [
         {
           title: "Tweet: TSA wait times at LAX are insane today...",
           source_url: "https://x.com/i/web/status/1875961234567890123",
           content: "TSA wait times at LAX are insane today. Been waiting 45 minutes!",
           relevance_score: 10,
+          finding_type: 'twitter_opportunity',
         },
         {
           title: "Tweet: Flying out of JFK tomorrow, nervous about lines...",
           source_url: "https://x.com/i/web/status/1875962345678901234",
           content: "Flying out of JFK tomorrow morning. How early should I arrive?",
           relevance_score: 9,
+          finding_type: 'twitter_opportunity',
+        },
+        {
+          title: "Reddit: Best activities for toddlers on rainy days?",
+          source_url: "https://reddit.com/r/Parenting/comments/sample123/best_activities_for_toddlers",
+          content: "Looking for screen-free activities to keep my 3 year old busy on rainy days. Any ideas?",
+          relevance_score: 9,
+          finding_type: 'reddit_opportunity',
+        },
+        {
+          title: "Reddit: Cover letter writing is so frustrating...",
+          source_url: "https://reddit.com/r/jobs/comments/sample456/cover_letter_frustration",
+          content: "I've applied to 50 jobs and writing unique cover letters for each is exhausting. There has to be a better way.",
+          relevance_score: 10,
+          finding_type: 'reddit_opportunity',
         },
       ];
 
-      for (const tweet of sampleTweets) {
+      for (const post of samplePosts) {
         findings.push({
           campaign_id,
-          ...tweet,
-          finding_type: 'twitter_opportunity',
+          ...post,
           processed: false,
         });
       }
