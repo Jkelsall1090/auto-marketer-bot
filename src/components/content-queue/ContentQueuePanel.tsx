@@ -3,8 +3,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useMarketingTactics, useMarkTacticExecuted, useDeleteTactic, usePostedActions, type MarketingTactic } from "@/hooks/useContentQueue";
 import { useCampaigns, useRunAgent } from "@/hooks/useCampaigns";
+import { supabase } from "@/integrations/supabase/client";
 import { 
   Copy, 
   Check, 
@@ -14,7 +18,9 @@ import {
   Loader2,
   Play,
   RefreshCw,
-  Sparkles
+  Sparkles,
+  Mail,
+  Send
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -44,19 +50,28 @@ const platformColors: Record<string, string> = {
   general: "bg-muted text-muted-foreground border-border",
 };
 
-function ContentCard({ tactic, onCopy, onPost, onSkip }: { 
+function ContentCard({ tactic, onCopy, onPost, onSkip, onSendEmail }: { 
   tactic: MarketingTactic;
   onCopy: () => void;
   onPost: () => void;
   onSkip: () => void;
+  onSendEmail?: (tactic: MarketingTactic) => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const isEmail = tactic.platform.toLowerCase() === 'email';
 
   const handleCopy = () => {
     navigator.clipboard.writeText(tactic.content);
     setCopied(true);
     onCopy();
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Parse email content for subject line if present
+  const getEmailSubject = () => {
+    const lines = tactic.content.split('\n');
+    const subjectLine = lines.find(l => l.toLowerCase().startsWith('subject:'));
+    return subjectLine ? subjectLine.replace(/^subject:\s*/i, '') : tactic.tactic_type;
   };
 
   return (
@@ -124,7 +139,7 @@ function ContentCard({ tactic, onCopy, onPost, onSkip }: {
         )}
 
         {/* Generated response */}
-        <div className="rounded-lg bg-secondary/50 p-4 text-sm leading-relaxed">
+        <div className="rounded-lg bg-secondary/50 p-4 text-sm leading-relaxed whitespace-pre-wrap">
           {tactic.content}
         </div>
         
@@ -144,15 +159,27 @@ function ContentCard({ tactic, onCopy, onPost, onSkip }: {
             {copied ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
             {copied ? "Copied!" : "Copy"}
           </Button>
-          <Button 
-            size="sm" 
-            variant="default" 
-            onClick={onPost}
-            className="flex-1"
-          >
-            <Check className="h-4 w-4 mr-1" />
-            Mark Posted
-          </Button>
+          {isEmail && onSendEmail ? (
+            <Button 
+              size="sm" 
+              variant="default" 
+              onClick={() => onSendEmail(tactic)}
+              className="flex-1"
+            >
+              <Send className="h-4 w-4 mr-1" />
+              Send Email
+            </Button>
+          ) : (
+            <Button 
+              size="sm" 
+              variant="default" 
+              onClick={onPost}
+              className="flex-1"
+            >
+              <Check className="h-4 w-4 mr-1" />
+              Mark Posted
+            </Button>
+          )}
           <Button 
             size="sm" 
             variant="ghost" 
@@ -163,6 +190,169 @@ function ContentCard({ tactic, onCopy, onPost, onSkip }: {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// Email send dialog component
+function SendEmailDialog({ 
+  isOpen, 
+  onClose, 
+  tactic, 
+  campaignId,
+  onSuccess 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  tactic: MarketingTactic | null;
+  campaignId: string | null;
+  onSuccess: () => void;
+}) {
+  const [toEmail, setToEmail] = useState("");
+  const [subject, setSubject] = useState("");
+  const [template, setTemplate] = useState<"marketing" | "newsletter" | "outreach">("marketing");
+  const [senderName, setSenderName] = useState("Marketing Team");
+  const [isSending, setIsSending] = useState(false);
+
+  // Parse subject from content if available
+  const parseSubjectFromContent = (content: string) => {
+    const lines = content.split('\n');
+    const subjectLine = lines.find(l => l.toLowerCase().startsWith('subject:'));
+    return subjectLine ? subjectLine.replace(/^subject:\s*/i, '') : '';
+  };
+
+  // Update subject when tactic changes
+  useState(() => {
+    if (tactic) {
+      const parsedSubject = parseSubjectFromContent(tactic.content);
+      setSubject(parsedSubject || tactic.tactic_type);
+    }
+  });
+
+  const handleSend = async () => {
+    if (!toEmail || !subject || !tactic) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    setIsSending(true);
+    try {
+      // Remove subject line from content if present
+      let emailContent = tactic.content;
+      const lines = emailContent.split('\n');
+      if (lines[0]?.toLowerCase().startsWith('subject:')) {
+        emailContent = lines.slice(1).join('\n').trim();
+      }
+
+      const { data, error } = await supabase.functions.invoke("agent-send-email", {
+        body: {
+          campaign_id: campaignId,
+          tactic_id: tactic.id,
+          to_email: toEmail,
+          subject: subject,
+          content: emailContent,
+          template: template,
+          from_name: senderName,
+          headline: subject,
+        },
+      });
+
+      if (error) throw error;
+
+      toast.success("Email sent successfully!");
+      onSuccess();
+      onClose();
+      setToEmail("");
+    } catch (error: any) {
+      console.error("Error sending email:", error);
+      toast.error("Failed to send email: " + error.message);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Mail className="h-5 w-5" />
+            Send Email
+          </DialogTitle>
+          <DialogDescription>
+            Configure and send this email content
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="to-email">Recipient Email *</Label>
+            <Input
+              id="to-email"
+              type="email"
+              placeholder="recipient@example.com"
+              value={toEmail}
+              onChange={(e) => setToEmail(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="subject">Subject Line *</Label>
+            <Input
+              id="subject"
+              placeholder="Email subject"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="template">Email Template</Label>
+            <select
+              id="template"
+              value={template}
+              onChange={(e) => setTemplate(e.target.value as typeof template)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="marketing">Marketing (Hero + CTA)</option>
+              <option value="newsletter">Newsletter (Multi-section)</option>
+              <option value="outreach">Outreach (Personal)</option>
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="sender-name">Sender Name</Label>
+            <Input
+              id="sender-name"
+              placeholder="Your name or company"
+              value={senderName}
+              onChange={(e) => setSenderName(e.target.value)}
+            />
+          </div>
+
+          {/* Preview */}
+          <div className="space-y-2">
+            <Label>Content Preview</Label>
+            <div className="rounded-lg bg-muted p-3 text-sm max-h-32 overflow-y-auto">
+              {tactic?.content}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleSend} disabled={isSending || !toEmail || !subject}>
+            {isSending ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4 mr-2" />
+            )}
+            Send Email
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -186,6 +376,8 @@ export function ContentQueuePanel() {
   const [selectedCampaign, setSelectedCampaign] = useState<string | null>(null);
   const [selectedPlatform, setSelectedPlatform] = useState<string>("all");
   const [quantity, setQuantity] = useState<number>(10);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [selectedEmailTactic, setSelectedEmailTactic] = useState<MarketingTactic | null>(null);
   
   const { data: tactics, isLoading: tacticsLoading, refetch } = useMarketingTactics(selectedCampaign || undefined);
   const { data: postedActionsData } = usePostedActions(selectedCampaign || undefined);
@@ -212,6 +404,16 @@ export function ContentQueuePanel() {
       platform: selectedPlatform !== "all" ? selectedPlatform : undefined,
       quantity 
     });
+    refetch();
+  };
+
+  const handleSendEmail = (tactic: MarketingTactic) => {
+    setSelectedEmailTactic(tactic);
+    setEmailDialogOpen(true);
+  };
+
+  const handleEmailSuccess = () => {
+    markExecuted.mutate({ tacticId: selectedEmailTactic!.id, executed: true });
     refetch();
   };
 
@@ -319,6 +521,7 @@ export function ContentQueuePanel() {
                   onCopy={() => toast.success("Content copied to clipboard!")}
                   onPost={() => markExecuted.mutate({ tacticId: tactic.id, executed: true })}
                   onSkip={() => deleteTactic.mutate(tactic.id)}
+                  onSendEmail={handleSendEmail}
                 />
               ))}
             </div>
@@ -380,6 +583,15 @@ export function ContentQueuePanel() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Email Send Dialog */}
+      <SendEmailDialog
+        isOpen={emailDialogOpen}
+        onClose={() => setEmailDialogOpen(false)}
+        tactic={selectedEmailTactic}
+        campaignId={selectedCampaign}
+        onSuccess={handleEmailSuccess}
+      />
     </div>
   );
 }
