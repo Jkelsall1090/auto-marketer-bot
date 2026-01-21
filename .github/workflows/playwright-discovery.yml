@@ -38,13 +38,10 @@ jobs:
 
       - name: Run Discovery
         env:
-          # Supabase credentials for auto-loading campaign config
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          # Webhook configuration
+          # Webhook configuration (handles both saving findings AND fetching campaign config)
           WEBHOOK_URL: https://rqvdxclxoasdjvuwvngm.supabase.co/functions/v1/discovery-webhook
           DISCOVERY_WEBHOOK_SECRET: ${{ secrets.DISCOVERY_WEBHOOK_SECRET }}
-          # Campaign configuration (product/name auto-loaded from DB)
+          # Campaign ID (name/product/channels are auto-fetched via webhook)
           CAMPAIGN_ID: ${{ github.event.inputs.campaign_id }}
           PLATFORMS: ${{ github.event.inputs.platforms || 'reddit' }}
           # Optional platform credentials (add as GitHub Secrets if needed)
