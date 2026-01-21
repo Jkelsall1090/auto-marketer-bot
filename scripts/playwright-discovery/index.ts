@@ -87,8 +87,8 @@ function randomDelay(min: number, max: number): Promise<void> {
 function getProductConfig(campaign: Campaign): { subreddits: string[]; keywords: string[] } {
   const productLower = campaign.product.toLowerCase();
   
-  // Cover letter / job seeker products
-  if (productLower.includes('cover letter') || productLower.includes('resume') || productLower.includes('job')) {
+  // Cover letter / job seeker products (check for both "cover letter" and "coverletter")
+  if (productLower.includes('cover letter') || productLower.includes('coverletter') || productLower.includes('resume') || productLower.includes('job seeker')) {
     return {
       subreddits: ['jobs', 'careerguidance', 'resumes', 'GetEmployed', 'jobsearchhacks', 'recruitinghell', 'antiwork'],
       keywords: ['cover letter', 'resume', 'job application', 'applying for jobs', 'job search', 'hiring manager']
