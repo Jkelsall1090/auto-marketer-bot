@@ -40,8 +40,8 @@ The workflow runs automatically every 6 hours. You can also trigger it manually:
 |----------|---------------|--------|
 | Reddit | No (public subreddits) | ✅ Ready |
 | LinkedIn | Yes | ✅ Ready |
-| Facebook | Yes | 🚧 Coming soon |
-| Nextdoor | Yes | 🚧 Coming soon |
+| Facebook | Yes | ✅ Ready |
+| Nextdoor | Yes | ✅ Ready |
 
 ## Human-Like Behavior
 
