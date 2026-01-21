@@ -25,6 +25,15 @@ const CONFIG = {
   minRelevanceForCollection: 0.3,
 };
 
+const DEBUG = String(process.env.DEBUG || '').toLowerCase() === 'true';
+const HEADLESS = String(process.env.HEADLESS || '').toLowerCase() === 'false' ? false : !DEBUG;
+const SCREENSHOT_ON_EMPTY =
+  String(process.env.SCREENSHOT_ON_EMPTY || '').toLowerCase() === 'true' || DEBUG;
+
+function sanitizeFilenamePart(input: string) {
+  return input.replace(/[^a-z0-9-_]/gi, '_').slice(0, 60);
+}
+
 // Help-seeking phrases to look for (expanded)
 const HELP_PHRASES = [
   'anyone know',
@@ -314,6 +323,32 @@ async function discoverReddit(
         await page.keyboard.press('PageDown');
         await randomDelay(1000, 2000);
       }
+
+      // If we can't see any posts in the DOM, we're likely blocked/served an interstitial.
+      // Capture a screenshot + page snippet so we can diagnose quickly.
+      const domPostCount = await page.locator('.thing.link').count();
+      if (domPostCount === 0) {
+        const pageTitle = await page.title().catch(() => '');
+        const snippet = await page
+          .evaluate(() => (document.body?.innerText || '').slice(0, 300))
+          .catch(() => '');
+
+        log(
+          `r/${subreddit}: 0 posts detected (title: ${JSON.stringify(pageTitle)}; snippet: ${JSON.stringify(
+            snippet.replace(/\s+/g, ' ').trim()
+          )})`,
+          'warn'
+        );
+
+        if (SCREENSHOT_ON_EMPTY) {
+          await page
+            .screenshot({
+              path: `screenshots/reddit-${sanitizeFilenamePart(subreddit)}-empty.png`,
+              fullPage: true,
+            })
+            .catch(() => undefined);
+        }
+      }
       
       // Extract posts
       const redditPosts = await page.evaluate(() => {
@@ -410,6 +445,28 @@ async function discoverReddit(
       await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
       
       await randomDelay(CONFIG.scrollPauseMin, CONFIG.scrollPauseMax);
+
+      const searchDomPostCount = await page.locator('.thing.link').count();
+      if (searchDomPostCount === 0) {
+        const pageTitle = await page.title().catch(() => '');
+        const snippet = await page
+          .evaluate(() => (document.body?.innerText || '').slice(0, 300))
+          .catch(() => '');
+        log(
+          `Reddit search "${query}": 0 results detected (title: ${JSON.stringify(pageTitle)}; snippet: ${JSON.stringify(
+            snippet.replace(/\s+/g, ' ').trim()
+          )})`,
+          'warn'
+        );
+        if (SCREENSHOT_ON_EMPTY) {
+          await page
+            .screenshot({
+              path: `screenshots/reddit-search-${sanitizeFilenamePart(query)}-empty.png`,
+              fullPage: true,
+            })
+            .catch(() => undefined);
+        }
+      }
       
       const searchResults = await page.evaluate(() => {
         const items: any[] = [];
@@ -1140,13 +1197,24 @@ async function main() {
 
   // Launch browser
   const browser = await chromium.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    headless: HEADLESS,
+    slowMo: DEBUG ? 75 : 0,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-blink-features=AutomationControlled',
+    ],
   });
   
   const context = await browser.newContext({
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     viewport: { width: 1280, height: 800 },
+  });
+
+  // Reduce obvious automation signals.
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
   });
   
   const page = await context.newPage();
