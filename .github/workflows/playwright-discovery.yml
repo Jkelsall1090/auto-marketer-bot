@@ -11,7 +11,7 @@ on:
         required: false
         type: string
       platforms:
-        description: 'Platforms to discover (comma-separated: reddit,linkedin)'
+        description: 'Platforms to discover (comma-separated: reddit,linkedin,facebook,nextdoor)'
         required: false
         default: 'reddit'
         type: string
