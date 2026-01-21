@@ -4,6 +4,8 @@
  * Discovers social media posts for intent analysis.
  * Runs via GitHub Actions on a schedule.
  * Posts findings to a webhook for the Intent Detection Agent to analyze.
+ * 
+ * Last updated: 2026-01-21 - Fixed product config matching for CoverLetterAI
  */
 
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
