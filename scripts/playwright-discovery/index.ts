@@ -1111,7 +1111,25 @@ async function saveFindings(
     return 0;
   }
   
-  const findings = posts.map(post => ({
+  // Filter out non-actionable URLs (ads, images, galleries without discussion context)
+  const actionablePosts = posts.filter(post => {
+    const url = (post.url || '').toLowerCase();
+    if (url.includes('i.redd.it/')) return false; // Direct image links
+    if (url.includes('alb.reddit.com/')) return false; // Reddit ad tracking
+    if (url.includes('/gallery/') && !url.includes('/comments/')) return false; // Galleries without thread
+    return true;
+  });
+  
+  if (actionablePosts.length < posts.length) {
+    log(`Filtered out ${posts.length - actionablePosts.length} non-actionable URLs (ads/images)`);
+  }
+  
+  if (actionablePosts.length === 0) {
+    log('No actionable posts to save after filtering');
+    return 0;
+  }
+  
+  const findings = actionablePosts.map(post => ({
     title: post.title.substring(0, 500),
     content: post.content.substring(0, 5000),
     source_url: post.url,
