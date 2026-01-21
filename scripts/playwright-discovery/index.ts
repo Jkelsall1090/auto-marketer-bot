@@ -9,6 +9,7 @@
  */
 
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
+import * as readline from 'node:readline';
 
 // ─────────────────────────────────────────────────────────────
 // CONFIGURATION
@@ -119,6 +120,64 @@ function log(message: string, level: 'info' | 'warn' | 'error' = 'info') {
 function randomDelay(min: number, max: number): Promise<void> {
   const delay = Math.floor(Math.random() * (max - min + 1)) + min;
   return new Promise(resolve => setTimeout(resolve, delay));
+}
+
+async function waitForEnter(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    rl.question('', () => {
+      rl.close();
+      resolve();
+    });
+  });
+}
+
+async function maybePauseForFacebookChallenge(page: Page, reason: string): Promise<boolean> {
+  const url = page.url().toLowerCase();
+  const urlFlagged =
+    url.includes('checkpoint') ||
+    url.includes('two_step_verification') ||
+    url.includes('two_factor') ||
+    url.includes('captcha');
+
+  // Facebook sometimes shows a generic "This page isn't available" screen during blocks.
+  const bodySnippet = await page
+    .evaluate(() => (document.body?.innerText || '').slice(0, 5000).toLowerCase())
+    .catch(() => '');
+
+  const textFlagged =
+    bodySnippet.includes("this page isn't available") ||
+    bodySnippet.includes('help us confirm') ||
+    bodySnippet.includes('security check') ||
+    bodySnippet.includes('captcha');
+
+  if (!urlFlagged && !textFlagged) return false;
+
+  log(`⚠️  Facebook challenge detected (${reason})`, 'warn');
+  log(`Current URL: ${page.url()}`, 'warn');
+  log('👉 Complete the verification/CAPTCHA in the browser window.', 'warn');
+  log('👉 Press ENTER in this terminal when done to continue...', 'warn');
+
+  if (CONFIG.screenshotOnError) {
+    const filename = `screenshots/facebook-challenge-${sanitizeFilenamePart(reason)}.png`;
+    try {
+      await page.screenshot({ path: filename });
+      log(`Saved screenshot: ${filename}`);
+    } catch (e) {
+      log(`Failed to save screenshot: ${e}`, 'warn');
+    }
+  }
+
+  if (HEADLESS) {
+    log('Cannot proceed in headless mode when a CAPTCHA/verification is required.', 'error');
+    throw new Error('Facebook verification required (rerun with HEADLESS=false)');
+  }
+
+  await waitForEnter();
+  return true;
 }
 
 // Fetch campaign config via webhook (no direct DB access needed)
@@ -690,54 +749,35 @@ async function discoverFacebook(
       // Wait for redirect
       await page.waitForNavigation({ timeout: 30000 });
       await randomDelay(2000, 3000);
-      
-      // Check for checkpoint/verification or 2FA
-      const currentUrl = page.url();
-      const needsManualIntervention = currentUrl.includes('checkpoint') || 
-                                       currentUrl.includes('two_step_verification') ||
-                                       currentUrl.includes('two_factor');
-      
-      if (needsManualIntervention) {
-        log('⚠️  Facebook requires manual verification (2FA/CAPTCHA/checkpoint)', 'warn');
-        log('👉 Please complete the verification in the browser window', 'warn');
-        log('👉 Press ENTER in this terminal when done...', 'warn');
-        
-        // Wait for user to press Enter
-        await new Promise<void>((resolve) => {
-          const readline = require('readline');
-          const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout
-          });
-          rl.question('', () => {
-            rl.close();
-            resolve();
-          });
-        });
-        
-        log('Continuing after manual verification...');
-        await randomDelay(2000, 3000);
+
+      // Pause if Facebook presents verification/CAPTCHA/blocks during login.
+      await maybePauseForFacebookChallenge(page, 'post-login');
+
+      // Sanity check: if we still see the login form, don't proceed.
+      const stillOnLogin = await page
+        .locator('input[name="email"]')
+        .count()
+        .then((n) => n > 0)
+        .catch(() => false);
+      if (stillOnLogin) {
+        log('Facebook login did not complete (still seeing login form).', 'warn');
+        if (!HEADLESS) {
+          log('👉 Complete any CAPTCHA/verification, then press ENTER to retry.', 'warn');
+          await waitForEnter();
+        } else {
+          throw new Error('Facebook login did not complete (rerun with HEADLESS=false)');
+        }
       }
-      
+
       log('Facebook login successful');
     }
     
     // Always pause after login to allow manual CAPTCHA handling if needed
-    if (process.env.HEADLESS === 'false') {
+    if (!HEADLESS) {
       log('⏸️  Pausing for manual intervention (solve any CAPTCHAs if they appear)', 'warn');
       log('👉 Press ENTER in this terminal to continue...', 'warn');
-      
-      await new Promise<void>((resolve) => {
-        const readline = require('readline');
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout
-        });
-        rl.question('', () => {
-          rl.close();
-          resolve();
-        });
-      });
+
+      await waitForEnter();
       
       log('Continuing...');
       await randomDelay(1000, 2000);
@@ -754,8 +794,10 @@ async function discoverFacebook(
         log(`Searching Facebook for: "${query}"`);
         
         // Navigate to search
-        const searchUrl = `https://www.facebook.com/search/posts?q=${encodeURIComponent(query)}`;
+        const searchUrl = `https://www.facebook.com/search/posts/?q=${encodeURIComponent(query)}`;
         await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+        await maybePauseForFacebookChallenge(page, `search-${query}`);
         
         await randomDelay(CONFIG.scrollPauseMin, CONFIG.scrollPauseMax);
         
@@ -831,6 +873,8 @@ async function discoverFacebook(
     try {
       log('Checking Facebook Groups...');
       await page.goto('https://www.facebook.com/groups/feed/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+      await maybePauseForFacebookChallenge(page, 'groups-feed');
       await randomDelay(CONFIG.scrollPauseMin, CONFIG.scrollPauseMax);
       
       // Scroll through groups feed
