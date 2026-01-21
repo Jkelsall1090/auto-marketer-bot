@@ -691,12 +691,32 @@ async function discoverFacebook(
       await page.waitForNavigation({ timeout: 30000 });
       await randomDelay(2000, 3000);
       
-      // Check for checkpoint/verification
-      const isCheckpoint = page.url().includes('checkpoint');
-      if (isCheckpoint) {
-        log('Facebook requires verification - stopping', 'error');
-        await page.screenshot({ path: 'screenshots/facebook-checkpoint.png' });
-        return posts;
+      // Check for checkpoint/verification or 2FA
+      const currentUrl = page.url();
+      const needsManualIntervention = currentUrl.includes('checkpoint') || 
+                                       currentUrl.includes('two_step_verification') ||
+                                       currentUrl.includes('two_factor');
+      
+      if (needsManualIntervention) {
+        log('⚠️  Facebook requires manual verification (2FA/CAPTCHA/checkpoint)', 'warn');
+        log('👉 Please complete the verification in the browser window', 'warn');
+        log('👉 Press ENTER in this terminal when done...', 'warn');
+        
+        // Wait for user to press Enter
+        await new Promise<void>((resolve) => {
+          const readline = require('readline');
+          const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout
+          });
+          rl.question('', () => {
+            rl.close();
+            resolve();
+          });
+        });
+        
+        log('Continuing after manual verification...');
+        await randomDelay(2000, 3000);
       }
       
       log('Facebook login successful');
