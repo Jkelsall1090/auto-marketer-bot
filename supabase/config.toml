@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.agent-send-email]
 verify_jwt = false
+
+[functions.discovery-webhook]
+verify_jwt = false
