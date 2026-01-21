@@ -10,16 +10,6 @@ on:
         description: 'Campaign ID to run discovery for (required)'
         required: true
         type: string
-      campaign_name:
-        description: 'Campaign name for logging'
-        required: false
-        default: 'Manual Run'
-        type: string
-      campaign_product:
-        description: 'Product/service keywords to search for'
-        required: false
-        default: 'marketing automation'
-        type: string
       platforms:
         description: 'Platforms to discover (comma-separated: reddit,linkedin,facebook,nextdoor)'
         required: false
@@ -48,13 +38,14 @@ jobs:
 
       - name: Run Discovery
         env:
-          # Webhook configuration (no database access needed)
+          # Supabase credentials for auto-loading campaign config
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Webhook configuration
           WEBHOOK_URL: https://rqvdxclxoasdjvuwvngm.supabase.co/functions/v1/discovery-webhook
           DISCOVERY_WEBHOOK_SECRET: ${{ secrets.DISCOVERY_WEBHOOK_SECRET }}
-          # Campaign configuration
+          # Campaign configuration (product/name auto-loaded from DB)
           CAMPAIGN_ID: ${{ github.event.inputs.campaign_id }}
-          CAMPAIGN_NAME: ${{ github.event.inputs.campaign_name || 'Default Campaign' }}
-          CAMPAIGN_PRODUCT: ${{ github.event.inputs.campaign_product || 'marketing automation' }}
           PLATFORMS: ${{ github.event.inputs.platforms || 'reddit' }}
           # Optional platform credentials (add as GitHub Secrets if needed)
           REDDIT_USERNAME: ${{ secrets.REDDIT_USERNAME }}

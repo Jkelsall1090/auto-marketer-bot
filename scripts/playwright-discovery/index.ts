@@ -5,25 +5,28 @@
  * Runs via GitHub Actions on a schedule.
  * Posts findings to a webhook for the Intent Detection Agent to analyze.
  * 
- * Last updated: 2026-01-21 - Fixed product config matching for CoverLetterAI
+ * Last updated: 2026-01-21 - Auto-load campaign from DB + smarter keyword expansion
  */
 
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
+import { createClient } from '@supabase/supabase-js';
 
 // ─────────────────────────────────────────────────────────────
 // CONFIGURATION
 // ─────────────────────────────────────────────────────────────
 
 const CONFIG = {
-  maxItemsPerPlatform: 20,
+  maxItemsPerPlatform: 30, // Increased - let Intent AI do heavy filtering
   scrollPauseMin: 2000,
   scrollPauseMax: 5000,
   actionPauseMin: 1000,
   actionPauseMax: 3000,
   screenshotOnError: true,
+  // Collect more liberally, filter less strictly
+  minRelevanceForCollection: 0.3,
 };
 
-// Help-seeking phrases to look for
+// Help-seeking phrases to look for (expanded)
 const HELP_PHRASES = [
   'anyone know',
   'looking for',
@@ -39,6 +42,24 @@ const HELP_PHRASES = [
   'recommend a',
   'where can i find',
   'does anyone have',
+  // Additional help phrases
+  'what should i',
+  'any recommendations',
+  'is there a',
+  'has anyone',
+  'first time',
+  'beginner',
+  'getting started',
+  'not sure how',
+  'frustrated with',
+  'hate when',
+  'ugh',
+  'wish there was',
+  'why is it so hard',
+  'help me',
+  'please help',
+  'stuck on',
+  'confused about',
 ];
 
 // ─────────────────────────────────────────────────────────────
@@ -70,6 +91,13 @@ interface DiscoveredPost {
   hashtags?: string[];
 }
 
+interface ProductConfig {
+  subreddits: string[];
+  keywords: string[];
+  // Expanded keywords for looser matching
+  relatedTerms: string[];
+}
+
 // ─────────────────────────────────────────────────────────────
 // UTILITIES
 // ─────────────────────────────────────────────────────────────
@@ -85,38 +113,107 @@ function randomDelay(min: number, max: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, delay));
 }
 
-// Product-specific configuration for better discovery
-function getProductConfig(campaign: Campaign): { subreddits: string[]; keywords: string[] } {
+// Fetch campaign from database
+async function fetchCampaignFromDB(campaignId: string): Promise<Campaign | null> {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !supabaseKey) {
+    log('Missing Supabase credentials for DB fetch', 'warn');
+    return null;
+  }
+  
+  try {
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { data, error } = await supabase
+      .from('campaigns')
+      .select('id, name, product, channels, goals')
+      .eq('id', campaignId)
+      .single();
+    
+    if (error) {
+      log(`Error fetching campaign: ${error.message}`, 'error');
+      return null;
+    }
+    
+    if (!data) {
+      log(`Campaign not found: ${campaignId}`, 'error');
+      return null;
+    }
+    
+    log(`Loaded campaign from DB: ${data.name} (product: ${data.product})`);
+    
+    return {
+      id: data.id,
+      name: data.name,
+      product: data.product,
+      channels: Array.isArray(data.channels) ? data.channels : [],
+      goals: Array.isArray(data.goals) ? data.goals : [],
+    };
+  } catch (err) {
+    log(`Failed to fetch campaign: ${err}`, 'error');
+    return null;
+  }
+}
+
+// Product-specific configuration for better discovery (expanded with related terms)
+function getProductConfig(campaign: Campaign): ProductConfig {
   const productLower = campaign.product.toLowerCase();
   
-  // Cover letter / job seeker products (check for both "cover letter" and "coverletter")
-  if (productLower.includes('cover letter') || productLower.includes('coverletter') || productLower.includes('resume') || productLower.includes('job seeker')) {
+  // Cover letter / job seeker products
+  if (productLower.includes('cover letter') || productLower.includes('coverletter') || 
+      productLower.includes('resume') || productLower.includes('job seeker') ||
+      productLower.includes('job search') || productLower.includes('career')) {
     return {
-      subreddits: ['jobs', 'careerguidance', 'resumes', 'GetEmployed', 'jobsearchhacks', 'recruitinghell', 'antiwork'],
-      keywords: ['cover letter', 'resume', 'job application', 'applying for jobs', 'job search', 'hiring manager']
+      subreddits: ['jobs', 'careerguidance', 'resumes', 'GetEmployed', 'jobsearchhacks', 
+                   'recruitinghell', 'antiwork', 'cscareerquestions', 'ITCareerQuestions',
+                   'FinancialCareers', 'careeradvice', 'interviews', 'JobFair'],
+      keywords: ['cover letter', 'resume', 'job application', 'applying for jobs', 
+                 'job search', 'hiring manager', 'cv', 'curriculum vitae'],
+      relatedTerms: ['applying', 'interview', 'hired', 'job hunt', 'job hunting',
+                     'unemployed', 'laid off', 'layoff', 'looking for work', 
+                     'got rejected', 'rejection', 'no callbacks', 'ghosted by recruiter',
+                     'ats', 'applicant tracking', 'tailoring', 'customizing',
+                     'entry level', 'career change', 'new job', 'job offer',
+                     'salary negotiation', 'application', 'apply', 'submitted']
     };
   }
   
   // Travel / airport products
-  if (productLower.includes('airport') || productLower.includes('travel') || productLower.includes('flight') || productLower.includes('tsa')) {
+  if (productLower.includes('airport') || productLower.includes('travel') || 
+      productLower.includes('flight') || productLower.includes('tsa') ||
+      productLower.includes('airportbuddy')) {
     return {
-      subreddits: ['travel', 'TravelHacks', 'Flights', 'TravelNoPics', 'solotravel', 'digitalnomad'],
-      keywords: ['airport', 'tsa wait', 'flight delay', 'travel tips', 'flying', 'layover']
+      subreddits: ['travel', 'TravelHacks', 'Flights', 'TravelNoPics', 'solotravel', 
+                   'digitalnomad', 'awardtravel', 'Shoestring', 'backpacking'],
+      keywords: ['airport', 'tsa wait', 'flight delay', 'travel tips', 'flying', 'layover'],
+      relatedTerms: ['security line', 'terminal', 'gate', 'boarding', 'checked bag',
+                     'carry on', 'customs', 'connection', 'missed flight', 'delayed',
+                     'cancelled', 'wait time', 'precheck', 'clear', 'lounge']
     };
   }
   
-  // Marketing / business products
-  if (productLower.includes('marketing') || productLower.includes('social media') || productLower.includes('etsy')) {
+  // Marketing / business / Etsy products
+  if (productLower.includes('marketing') || productLower.includes('social media') || 
+      productLower.includes('etsy') || productLower.includes('digital download') ||
+      productLower.includes('kids')) {
     return {
-      subreddits: ['smallbusiness', 'Entrepreneur', 'marketing', 'Etsy', 'ecommerce', 'socialmedia'],
-      keywords: ['marketing', 'promote', 'social media', 'engagement', 'grow audience', 'traffic']
+      subreddits: ['smallbusiness', 'Entrepreneur', 'marketing', 'Etsy', 'ecommerce', 
+                   'socialmedia', 'DigitalMarketing', 'SEO', 'content_marketing',
+                   'EtsySellers', 'AmazonSeller', 'sidehustle'],
+      keywords: ['marketing', 'promote', 'social media', 'engagement', 'grow audience', 'traffic'],
+      relatedTerms: ['sales', 'customers', 'visibility', 'reach', 'followers',
+                     'content', 'algorithm', 'viral', 'organic', 'paid ads',
+                     'conversion', 'click', 'impression', 'listing', 'seo']
     };
   }
   
-  // Default fallback
+  // Default fallback - generate terms from product name
+  const productWords = campaign.product.split(/[\s-_]+/).filter(w => w.length > 2);
   return {
-    subreddits: ['smallbusiness', 'Entrepreneur', 'startups'],
-    keywords: campaign.product.split(' ').filter(w => w.length > 3).slice(0, 3)
+    subreddits: ['smallbusiness', 'Entrepreneur', 'startups', 'SideProject', 'indiehackers'],
+    keywords: productWords.slice(0, 5),
+    relatedTerms: productWords.map(w => w.toLowerCase())
   };
 }
 
@@ -125,13 +222,51 @@ function generateSearchQueries(campaign: Campaign): string[] {
   const config = getProductConfig(campaign);
   
   // Generate queries based on product keywords and help phrases
-  for (const keyword of config.keywords.slice(0, 3)) {
-    for (const phrase of HELP_PHRASES.slice(0, 3)) {
+  for (const keyword of config.keywords.slice(0, 4)) {
+    for (const phrase of HELP_PHRASES.slice(0, 4)) {
       queries.push(`${phrase} ${keyword}`);
     }
   }
   
+  // Also add some related term searches
+  for (const term of config.relatedTerms.slice(0, 3)) {
+    queries.push(term);
+  }
+  
   return queries;
+}
+
+// Check if text matches any of our keywords/terms loosely
+function hasRelevantContent(text: string, config: ProductConfig): { matches: boolean; score: number } {
+  const textLower = text.toLowerCase();
+  
+  let score = 0;
+  
+  // Check exact keywords (high value)
+  for (const keyword of config.keywords) {
+    if (textLower.includes(keyword.toLowerCase())) {
+      score += 0.4;
+    }
+  }
+  
+  // Check related terms (medium value)
+  for (const term of config.relatedTerms) {
+    if (textLower.includes(term.toLowerCase())) {
+      score += 0.2;
+    }
+  }
+  
+  // Check help phrases (medium value - indicates intent)
+  for (const phrase of HELP_PHRASES) {
+    if (textLower.includes(phrase.toLowerCase())) {
+      score += 0.15;
+    }
+  }
+  
+  // Cap at 1.0
+  score = Math.min(score, 1.0);
+  
+  return { matches: score >= CONFIG.minRelevanceForCollection, score };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -202,28 +337,27 @@ async function discoverReddit(
         return items;
       });
       
-      // Check each post for relevance using product-specific keywords
+      // Check each post for relevance using smarter matching
       const productConfig = getProductConfig(campaign);
+      
+      // Determine if this is a "high-intent" subreddit for our product
+      const isHighIntentSubreddit = productConfig.subreddits.slice(0, 4).includes(subreddit);
       
       for (const post of redditPosts) {
         if (posts.length >= CONFIG.maxItemsPerPlatform) break;
         
         const titleLower = post.title.toLowerCase();
         
-        // Check for help-seeking phrases OR product-specific keywords
-        const hasHelpPhrase = HELP_PHRASES.some(phrase => 
-          titleLower.includes(phrase.toLowerCase())
-        );
-        const hasKeyword = productConfig.keywords.some(keyword =>
-          titleLower.includes(keyword.toLowerCase())
-        );
+        // Use our smarter relevance checker
+        const relevance = hasRelevantContent(titleLower, productConfig);
         
-        // For job-seeker subreddits, most posts are relevant - just check for help phrases
-        // For other subreddits, require keyword match
-        const isJobSeekerSubreddit = ['jobs', 'careerguidance', 'resumes', 'GetEmployed', 'jobsearchhacks'].includes(subreddit);
-        const isRelevant = isJobSeekerSubreddit ? hasHelpPhrase || hasKeyword : hasHelpPhrase && hasKeyword;
+        // For high-intent subreddits (first 4 in our list), be more lenient
+        // Collect posts that either match our keywords OR are in high-intent subreddits
+        const shouldCollect = relevance.matches || (isHighIntentSubreddit && posts.length < 8);
         
-        if (isRelevant || (isJobSeekerSubreddit && posts.length < 5)) {
+        if (shouldCollect) {
+          log(`  → Collecting: "${post.title.substring(0, 60)}..." (score: ${relevance.score.toFixed(2)})`);
+          
           // Navigate to post to get full content
           await page.goto(post.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
           await randomDelay(CONFIG.actionPauseMin, CONFIG.actionPauseMax);
@@ -968,31 +1102,51 @@ async function main() {
     process.exit(1);
   }
   
-  // Get campaign configuration from environment
+  // Get campaign ID from environment
   const campaignId = process.env.CAMPAIGN_ID;
-  const campaignName = process.env.CAMPAIGN_NAME || 'Default Campaign';
-  const campaignProduct = process.env.CAMPAIGN_PRODUCT || 'marketing automation';
   
   if (!campaignId) {
     log('Missing CAMPAIGN_ID - please specify which campaign to run', 'error');
     process.exit(1);
   }
   
-  // Build campaign object from environment
-  const campaign: Campaign = {
-    id: campaignId,
-    name: campaignName,
-    product: campaignProduct,
-    channels: (process.env.CAMPAIGN_CHANNELS || 'reddit').split(','),
-    goals: [],
-  };
+  // Try to load campaign from database first (preferred)
+  let campaign = await fetchCampaignFromDB(campaignId);
+  
+  // Fall back to environment variables if DB fetch fails
+  if (!campaign) {
+    log('Could not load campaign from DB, using environment variables', 'warn');
+    const campaignName = process.env.CAMPAIGN_NAME || 'Manual Run';
+    const campaignProduct = process.env.CAMPAIGN_PRODUCT;
+    
+    if (!campaignProduct) {
+      log('Missing CAMPAIGN_PRODUCT - cannot determine what to search for', 'error');
+      log('Either provide SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY to auto-load, or provide CAMPAIGN_PRODUCT', 'error');
+      process.exit(1);
+    }
+    
+    campaign = {
+      id: campaignId,
+      name: campaignName,
+      product: campaignProduct,
+      channels: (process.env.CAMPAIGN_CHANNELS || 'reddit').split(','),
+      goals: [],
+    };
+  }
+  
+  // Log what product config we're using
+  const productConfig = getProductConfig(campaign);
+  log(`Product: ${campaign.product}`);
+  log(`Target subreddits: ${productConfig.subreddits.join(', ')}`);
+  log(`Keywords: ${productConfig.keywords.join(', ')}`);
+  log(`Related terms: ${productConfig.relatedTerms.slice(0, 5).join(', ')}...`);
   
   // Get platforms to run
   const platforms = (process.env.PLATFORMS || 'reddit').split(',').map(p => p.trim().toLowerCase());
   
   log(`Campaign: ${campaign.name} (${campaign.id})`);
   log(`Platforms: ${platforms.join(', ')}`);
-  
+
   // Launch browser
   const browser = await chromium.launch({
     headless: true,
