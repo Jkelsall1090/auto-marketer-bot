@@ -3,11 +3,10 @@
  * 
  * Discovers social media posts for intent analysis.
  * Runs via GitHub Actions on a schedule.
- * Saves findings directly to Supabase for the Intent Detection Agent to analyze.
+ * Posts findings to a webhook for the Intent Detection Agent to analyze.
  */
 
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // ─────────────────────────────────────────────────────────────
 // CONFIGURATION
@@ -105,8 +104,7 @@ function generateSearchQueries(campaign: Campaign): string[] {
 
 async function discoverReddit(
   page: Page,
-  campaign: Campaign,
-  supabase: SupabaseClient
+  campaign: Campaign
 ): Promise<DiscoveredPost[]> {
   const posts: DiscoveredPost[] = [];
   const queries = generateSearchQueries(campaign);
@@ -283,8 +281,7 @@ async function discoverReddit(
 async function discoverLinkedIn(
   page: Page,
   context: BrowserContext,
-  campaign: Campaign,
-  supabase: SupabaseClient
+  campaign: Campaign
 ): Promise<DiscoveredPost[]> {
   const posts: DiscoveredPost[] = [];
   
@@ -406,8 +403,7 @@ async function discoverLinkedIn(
 async function discoverFacebook(
   page: Page,
   context: BrowserContext,
-  campaign: Campaign,
-  supabase: SupabaseClient
+  campaign: Campaign
 ): Promise<DiscoveredPost[]> {
   const posts: DiscoveredPost[] = [];
   
@@ -635,8 +631,7 @@ async function discoverFacebook(
 async function discoverNextdoor(
   page: Page,
   context: BrowserContext,
-  campaign: Campaign,
-  supabase: SupabaseClient
+  campaign: Campaign
 ): Promise<DiscoveredPost[]> {
   const posts: DiscoveredPost[] = [];
   
@@ -861,54 +856,58 @@ async function discoverNextdoor(
 }
 
 // ─────────────────────────────────────────────────────────────
-// SAVE FINDINGS TO SUPABASE
+// SAVE FINDINGS VIA WEBHOOK
 // ─────────────────────────────────────────────────────────────
 
 async function saveFindings(
-  supabase: SupabaseClient,
+  webhookUrl: string,
+  webhookSecret: string,
   campaignId: string,
-  posts: DiscoveredPost[]
+  posts: DiscoveredPost[],
+  platform: string
 ): Promise<number> {
-  let savedCount = 0;
-  
-  for (const post of posts) {
-    try {
-      // Check if we already have this URL
-      const { data: existing } = await supabase
-        .from('research_findings')
-        .select('id')
-        .eq('source_url', post.url)
-        .single();
-      
-      if (existing) {
-        log(`Skipping duplicate: ${post.url}`);
-        continue;
-      }
-      
-      const { error } = await supabase.from('research_findings').insert({
-        campaign_id: campaignId,
-        finding_type: `${post.platform}_opportunity`,
-        title: post.title.substring(0, 500),
-        content: post.content.substring(0, 5000),
-        source_url: post.url,
-        relevance_score: 50, // Default, intent agent will re-score
-        processed: false,
-        emotional_signals: [],
-        constraints: [],
-      });
-      
-      if (error) {
-        log(`Error saving finding: ${error.message}`, 'error');
-      } else {
-        savedCount++;
-      }
-      
-    } catch (error) {
-      log(`Error saving post: ${error}`, 'error');
-    }
+  if (posts.length === 0) {
+    log('No posts to save');
+    return 0;
   }
   
-  return savedCount;
+  const findings = posts.map(post => ({
+    title: post.title.substring(0, 500),
+    content: post.content.substring(0, 5000),
+    source_url: post.url,
+    platform: post.platform,
+    author: post.author,
+    posted_at: post.timestamp,
+  }));
+  
+  try {
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-webhook-secret': webhookSecret,
+      },
+      body: JSON.stringify({
+        campaign_id: campaignId,
+        findings,
+        platform,
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      log(`Webhook error (${response.status}): ${errorText}`, 'error');
+      return 0;
+    }
+    
+    const result = await response.json();
+    log(`Webhook response: saved=${result.saved}, duplicates=${result.duplicates}`);
+    return result.saved || 0;
+    
+  } catch (error) {
+    log(`Error calling webhook: ${error}`, 'error');
+    return 0;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -918,38 +917,39 @@ async function saveFindings(
 async function main() {
   log('🚀 Starting Playwright Discovery Agent');
   
-  // Initialize Supabase
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Get webhook configuration
+  const webhookUrl = process.env.WEBHOOK_URL;
+  const webhookSecret = process.env.DISCOVERY_WEBHOOK_SECRET;
   
-  if (!supabaseUrl || !supabaseKey) {
-    log('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY', 'error');
+  if (!webhookUrl || !webhookSecret) {
+    log('Missing WEBHOOK_URL or DISCOVERY_WEBHOOK_SECRET', 'error');
     process.exit(1);
   }
   
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  // Get campaign configuration from environment
+  const campaignId = process.env.CAMPAIGN_ID;
+  const campaignName = process.env.CAMPAIGN_NAME || 'Default Campaign';
+  const campaignProduct = process.env.CAMPAIGN_PRODUCT || 'marketing automation';
+  
+  if (!campaignId) {
+    log('Missing CAMPAIGN_ID - please specify which campaign to run', 'error');
+    process.exit(1);
+  }
+  
+  // Build campaign object from environment
+  const campaign: Campaign = {
+    id: campaignId,
+    name: campaignName,
+    product: campaignProduct,
+    channels: (process.env.CAMPAIGN_CHANNELS || 'reddit').split(','),
+    goals: [],
+  };
   
   // Get platforms to run
   const platforms = (process.env.PLATFORMS || 'reddit').split(',').map(p => p.trim().toLowerCase());
-  const targetCampaignId = process.env.CAMPAIGN_ID;
   
+  log(`Campaign: ${campaign.name} (${campaign.id})`);
   log(`Platforms: ${platforms.join(', ')}`);
-  
-  // Fetch campaigns
-  let query = supabase.from('campaigns').select('*').eq('status', 'active');
-  
-  if (targetCampaignId) {
-    query = query.eq('id', targetCampaignId);
-  }
-  
-  const { data: campaigns, error: campaignError } = await query;
-  
-  if (campaignError || !campaigns?.length) {
-    log(`No active campaigns found: ${campaignError?.message || 'empty result'}`, 'error');
-    process.exit(1);
-  }
-  
-  log(`Found ${campaigns.length} campaign(s) to process`);
   
   // Launch browser
   const browser = await chromium.launch({
@@ -971,47 +971,40 @@ async function main() {
   }
   
   try {
-    for (const campaign of campaigns) {
-      log(`\n📊 Processing campaign: ${campaign.name}`);
-      
-      let totalPosts: DiscoveredPost[] = [];
-      
-      // Run discovery for each platform
-      if (platforms.includes('reddit')) {
-        const redditPosts = await discoverReddit(page, campaign, supabase);
-        totalPosts = totalPosts.concat(redditPosts);
-      }
-      
-      if (platforms.includes('linkedin')) {
-        const linkedInPosts = await discoverLinkedIn(page, context, campaign, supabase);
-        totalPosts = totalPosts.concat(linkedInPosts);
-      }
-      
-      if (platforms.includes('facebook')) {
-        const facebookPosts = await discoverFacebook(page, context, campaign, supabase);
-        totalPosts = totalPosts.concat(facebookPosts);
-      }
-      
-      if (platforms.includes('nextdoor')) {
-        const nextdoorPosts = await discoverNextdoor(page, context, campaign, supabase);
-        totalPosts = totalPosts.concat(nextdoorPosts);
-      }
-      
-      // Save findings
-      const savedCount = await saveFindings(supabase, campaign.id, totalPosts);
-      log(`💾 Saved ${savedCount} new findings for campaign: ${campaign.name}`);
-      
-      // Update agent state
-      await supabase
-        .from('agent_state')
-        .upsert({
-          campaign_id: campaign.id,
-          phase: 'research',
-          last_run_at: new Date().toISOString(),
-          opportunities_queued: savedCount,
-        }, { onConflict: 'campaign_id' });
+    log(`\n📊 Processing campaign: ${campaign.name}`);
+    
+    let totalPosts: DiscoveredPost[] = [];
+    
+    // Run discovery for each platform
+    if (platforms.includes('reddit')) {
+      const redditPosts = await discoverReddit(page, campaign);
+      totalPosts = totalPosts.concat(redditPosts);
     }
     
+    if (platforms.includes('linkedin')) {
+      const linkedInPosts = await discoverLinkedIn(page, context, campaign);
+      totalPosts = totalPosts.concat(linkedInPosts);
+    }
+    
+    if (platforms.includes('facebook')) {
+      const facebookPosts = await discoverFacebook(page, context, campaign);
+      totalPosts = totalPosts.concat(facebookPosts);
+    }
+    
+    if (platforms.includes('nextdoor')) {
+      const nextdoorPosts = await discoverNextdoor(page, context, campaign);
+      totalPosts = totalPosts.concat(nextdoorPosts);
+    }
+    
+    // Save findings via webhook
+    const savedCount = await saveFindings(
+      webhookUrl,
+      webhookSecret,
+      campaign.id,
+      totalPosts,
+      platforms.join(',')
+    );
+    log(`💾 Saved ${savedCount} new findings for campaign: ${campaign.name}`);
   } catch (error) {
     log(`Fatal error: ${error}`, 'error');
     await page.screenshot({ path: 'screenshots/fatal-error.png' });
