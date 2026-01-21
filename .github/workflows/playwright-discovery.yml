@@ -1,0 +1,64 @@
+name: Social Media Discovery
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      campaign_id:
+        description: 'Campaign ID to run discovery for (leave empty for all active)'
+        required: false
+        type: string
+      platforms:
+        description: 'Platforms to discover (comma-separated: reddit,linkedin)'
+        required: false
+        default: 'reddit'
+        type: string
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright
+        run: |
+          cd scripts/playwright-discovery
+          npm ci
+          npx playwright install chromium --with-deps
+
+      - name: Run Discovery
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CAMPAIGN_ID: ${{ github.event.inputs.campaign_id }}
+          PLATFORMS: ${{ github.event.inputs.platforms || 'reddit' }}
+          # Optional platform credentials (add as GitHub Secrets if needed)
+          REDDIT_USERNAME: ${{ secrets.REDDIT_USERNAME }}
+          REDDIT_PASSWORD: ${{ secrets.REDDIT_PASSWORD }}
+          LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
+          LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
+          FACEBOOK_EMAIL: ${{ secrets.FACEBOOK_EMAIL }}
+          FACEBOOK_PASSWORD: ${{ secrets.FACEBOOK_PASSWORD }}
+          NEXTDOOR_EMAIL: ${{ secrets.NEXTDOOR_EMAIL }}
+          NEXTDOOR_PASSWORD: ${{ secrets.NEXTDOOR_PASSWORD }}
+        run: |
+          cd scripts/playwright-discovery
+          npm run discover
+
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-screenshots
+          path: scripts/playwright-discovery/screenshots/
+          retention-days: 7
