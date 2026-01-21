@@ -47,7 +47,7 @@ interface OpportunityFinding {
 
 function inferPlatformFromUrl(url: string): string {
   const u = (url || "").toLowerCase();
-  if (u.includes("reddit.com")) return "reddit";
+  if (u.includes("reddit.com") || u.includes("i.redd.it") || u.includes("alb.reddit.com")) return "reddit";
   if (u.includes("nextdoor.com")) return "nextdoor";
   if (u.includes("facebook.com")) return "facebook";
   if (u.includes("linkedin.com")) return "linkedin";
@@ -55,6 +55,16 @@ function inferPlatformFromUrl(url: string): string {
   if (u.includes("twitter.com") || u.includes("x.com")) return "twitter";
   if (u.includes("amazon.")) return "amazon";
   return "web";
+}
+
+function isActionableUrl(url: string): boolean {
+  if (!url) return false;
+  const u = url.toLowerCase();
+  // Filter out non-actionable URLs
+  if (u.includes("i.redd.it/")) return false; // Direct image links
+  if (u.includes("alb.reddit.com/")) return false; // Reddit ad tracking
+  if (u.includes("/gallery/") && u.includes("reddit.com")) return false; // Galleries without comments
+  return true;
 }
 
 function formatFindingTypeLabel(findingType: string): string {
@@ -299,15 +309,21 @@ export function ProductResearchPanel() {
                         </p>
 
                         <div className="pt-2 border-t border-border">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-full text-primary hover:text-primary hover:bg-primary/10"
-                            onClick={() => window.open(finding.source_url, '_blank')}
-                          >
-                            <ExternalLink className="h-4 w-4 mr-2" />
-                            View source
-                          </Button>
+                          {isActionableUrl(finding.source_url) ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="w-full text-primary hover:text-primary hover:bg-primary/10"
+                              onClick={() => window.open(finding.source_url, '_blank')}
+                            >
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                              View source
+                            </Button>
+                          ) : (
+                            <p className="text-xs text-muted-foreground text-center py-2">
+                              No direct link available (image/ad)
+                            </p>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
