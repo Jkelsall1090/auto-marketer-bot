@@ -722,6 +722,27 @@ async function discoverFacebook(
       log('Facebook login successful');
     }
     
+    // Always pause after login to allow manual CAPTCHA handling if needed
+    if (process.env.HEADLESS === 'false') {
+      log('⏸️  Pausing for manual intervention (solve any CAPTCHAs if they appear)', 'warn');
+      log('👉 Press ENTER in this terminal to continue...', 'warn');
+      
+      await new Promise<void>((resolve) => {
+        const readline = require('readline');
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+        rl.question('', () => {
+          rl.close();
+          resolve();
+        });
+      });
+      
+      log('Continuing...');
+      await randomDelay(1000, 2000);
+    }
+    
     // Generate search queries based on campaign
     const queries = generateSearchQueries(campaign);
     
