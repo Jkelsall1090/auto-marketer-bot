@@ -48,6 +48,58 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Initialize Supabase client with service role
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Handle GET request - fetch campaign config
+    if (req.method === "GET") {
+      const url = new URL(req.url);
+      const campaignId = url.searchParams.get("campaign_id");
+      
+      if (!campaignId) {
+        return new Response(
+          JSON.stringify({ error: "Missing campaign_id parameter" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`Fetching campaign config for: ${campaignId}`);
+      
+      const { data: campaign, error: campaignError } = await supabase
+        .from("campaigns")
+        .select("id, name, product, channels, goals, status")
+        .eq("id", campaignId)
+        .single();
+
+      if (campaignError || !campaign) {
+        console.error("Campaign not found:", campaignError);
+        return new Response(
+          JSON.stringify({ error: "Campaign not found", details: campaignError?.message }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`Returning config for campaign: ${campaign.name} (product: ${campaign.product})`);
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true,
+          campaign: {
+            id: campaign.id,
+            name: campaign.name,
+            product: campaign.product,
+            channels: campaign.channels,
+            goals: campaign.goals,
+            status: campaign.status,
+          }
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Handle POST request - save findings (existing logic)
     const payload: WebhookPayload = await req.json();
     console.log(`Received ${payload.findings?.length || 0} findings for campaign ${payload.campaign_id} from ${payload.platform}`);
 
@@ -58,10 +110,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Initialize Supabase client with service role
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Reuse the supabase client already initialized above
 
     // Filter out duplicates by source_url
     const existingUrls = new Set<string>();

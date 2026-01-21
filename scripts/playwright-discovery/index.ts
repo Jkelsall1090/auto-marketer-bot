@@ -5,11 +5,10 @@
  * Runs via GitHub Actions on a schedule.
  * Posts findings to a webhook for the Intent Detection Agent to analyze.
  * 
- * Last updated: 2026-01-21 - Auto-load campaign from DB + smarter keyword expansion
+ * Last updated: 2026-01-21 - Fetch campaign via webhook (no direct DB access needed)
  */
 
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
-import { createClient } from '@supabase/supabase-js';
 
 // ─────────────────────────────────────────────────────────────
 // CONFIGURATION
@@ -113,42 +112,50 @@ function randomDelay(min: number, max: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, delay));
 }
 
-// Fetch campaign from database
-async function fetchCampaignFromDB(campaignId: string): Promise<Campaign | null> {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Fetch campaign config via webhook (no direct DB access needed)
+async function fetchCampaignFromWebhook(campaignId: string): Promise<Campaign | null> {
+  const webhookUrl = process.env.WEBHOOK_URL;
+  const webhookSecret = process.env.DISCOVERY_WEBHOOK_SECRET;
   
-  if (!supabaseUrl || !supabaseKey) {
-    log('Missing Supabase credentials for DB fetch', 'warn');
+  if (!webhookUrl || !webhookSecret) {
+    log('Missing WEBHOOK_URL or DISCOVERY_WEBHOOK_SECRET for campaign fetch', 'warn');
     return null;
   }
   
   try {
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    const { data, error } = await supabase
-      .from('campaigns')
-      .select('id, name, product, channels, goals')
-      .eq('id', campaignId)
-      .single();
+    const url = `${webhookUrl}?campaign_id=${encodeURIComponent(campaignId)}`;
+    log(`Fetching campaign config from webhook...`);
     
-    if (error) {
-      log(`Error fetching campaign: ${error.message}`, 'error');
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-webhook-secret': webhookSecret,
+      },
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      log(`Webhook returned ${response.status}: ${errorText}`, 'error');
       return null;
     }
     
-    if (!data) {
-      log(`Campaign not found: ${campaignId}`, 'error');
+    const data = await response.json();
+    
+    if (!data.success || !data.campaign) {
+      log(`Invalid response from webhook: ${JSON.stringify(data)}`, 'error');
       return null;
     }
     
-    log(`Loaded campaign from DB: ${data.name} (product: ${data.product})`);
+    const campaign = data.campaign;
+    log(`Loaded campaign from webhook: ${campaign.name} (product: ${campaign.product})`);
     
     return {
-      id: data.id,
-      name: data.name,
-      product: data.product,
-      channels: Array.isArray(data.channels) ? data.channels : [],
-      goals: Array.isArray(data.goals) ? data.goals : [],
+      id: campaign.id,
+      name: campaign.name,
+      product: campaign.product,
+      channels: Array.isArray(campaign.channels) ? campaign.channels : [],
+      goals: Array.isArray(campaign.goals) ? campaign.goals : [],
     };
   } catch (err) {
     log(`Failed to fetch campaign: ${err}`, 'error');
@@ -1110,28 +1117,12 @@ async function main() {
     process.exit(1);
   }
   
-  // Try to load campaign from database first (preferred)
-  let campaign = await fetchCampaignFromDB(campaignId);
+  // Fetch campaign config via webhook (uses same credentials already validated above)
+  const campaign = await fetchCampaignFromWebhook(campaignId);
   
-  // Fall back to environment variables if DB fetch fails
   if (!campaign) {
-    log('Could not load campaign from DB, using environment variables', 'warn');
-    const campaignName = process.env.CAMPAIGN_NAME || 'Manual Run';
-    const campaignProduct = process.env.CAMPAIGN_PRODUCT;
-    
-    if (!campaignProduct) {
-      log('Missing CAMPAIGN_PRODUCT - cannot determine what to search for', 'error');
-      log('Either provide SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY to auto-load, or provide CAMPAIGN_PRODUCT', 'error');
-      process.exit(1);
-    }
-    
-    campaign = {
-      id: campaignId,
-      name: campaignName,
-      product: campaignProduct,
-      channels: (process.env.CAMPAIGN_CHANNELS || 'reddit').split(','),
-      goals: [],
-    };
+    log('Failed to load campaign - check that the campaign ID exists in the database', 'error');
+    process.exit(1);
   }
   
   // Log what product config we're using
