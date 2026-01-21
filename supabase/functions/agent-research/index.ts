@@ -6,6 +6,31 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Intent categories as defined in the agent spec
+type IntentCategory = 
+  | 'explicit_help_request'
+  | 'implicit_pain_struggle'
+  | 'solution_research_comparison'
+  | 'general_discussion_opinion'
+  | 'promotional_irrelevant';
+
+type RecommendedNextStep = 'ignore' | 'review' | 'high_priority';
+
+interface IntentAnalysis {
+  platform: string;
+  url: string;
+  intent_category: IntentCategory;
+  intent_score: number;
+  should_human_review: boolean;
+  confidence_reasoning: string;
+  core_problem: string;
+  underlying_motivation: string;
+  constraints: string[];
+  emotional_signals: string[];
+  matched_campaign_themes: string[];
+  recommended_next_step: RecommendedNextStep;
+}
+
 // Extract tweet ID from various Twitter/X URL formats
 function extractTweetId(url: string): string | null {
   const patterns = [
@@ -20,7 +45,19 @@ function extractTweetId(url: string): string | null {
   return null;
 }
 
-// Search using Firecrawl to find Twitter content
+// Infer platform from URL
+function inferPlatform(url: string): string {
+  if (url.includes('twitter.com') || url.includes('x.com')) return 'twitter';
+  if (url.includes('reddit.com')) return 'reddit';
+  if (url.includes('nextdoor.com')) return 'nextdoor';
+  if (url.includes('facebook.com')) return 'facebook';
+  if (url.includes('linkedin.com')) return 'linkedin';
+  if (url.includes('craigslist.org')) return 'craigslist';
+  if (url.includes('amazon.com')) return 'amazon';
+  return 'unknown';
+}
+
+// Search using Firecrawl to find content
 async function searchWithFirecrawl(
   query: string,
   apiKey: string,
@@ -49,6 +86,120 @@ async function searchWithFirecrawl(
   }
 
   return data.data || [];
+}
+
+// Analyze intent using Lovable AI
+async function analyzeIntent(
+  campaign: any,
+  post: { url: string; title: string; content: string; platform: string }
+): Promise<IntentAnalysis | null> {
+  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+  
+  if (!lovableApiKey) {
+    console.log('LOVABLE_API_KEY not configured, skipping intent analysis');
+    return null;
+  }
+
+  const systemPrompt = `You are an Intent Detection & Market Signal Intelligence Agent.
+
+Your role is DISCOVERY ONLY.
+
+You must NEVER generate replies, comments, DMs, or outreach messages.
+
+Your job is to analyze social posts and discussions and determine whether they express REAL, HIGH-INTENT NEED related to the provided campaign.
+
+CAMPAIGN CONTEXT:
+- Campaign: ${campaign.name}
+- Product: ${campaign.product}
+- Goals: ${JSON.stringify(campaign.goals || [])}
+- Channels: ${JSON.stringify(campaign.channels || [])}
+
+INTENT CLASSIFICATION (REQUIRED):
+Classify into ONE category:
+1. explicit_help_request - Directly asking for help, tools, recommendations, or guidance
+2. implicit_pain_struggle - Expressing frustration, confusion, inefficiency, or dissatisfaction
+3. solution_research_comparison - Evaluating tools, approaches, or vendors
+4. general_discussion_opinion - Talking about a topic without seeking help
+5. promotional_irrelevant - Selling, bragging, announcements, news, or unrelated content
+
+INTENT SCORING (REQUIRED):
+Return an intent_score from 0.00 to 1.00
+- 0.80 – 1.00 → Strong opportunity (high-intent)
+- 0.50 – 0.79 → Possible opportunity (review recommended)
+- 0.00 – 0.49 → Ignore
+
+Score based on: Urgency of language, Clarity of the problem, Recency, Engagement, Alignment with campaign themes
+
+HARD RULES:
+- DO NOT generate replies
+- DO NOT suggest messaging or commenting
+- DO NOT sell
+- DO NOT fabricate intent
+- Discovery ONLY
+
+OUTPUT FORMAT (STRICT JSON ONLY):
+{
+  "platform": "",
+  "url": "",
+  "intent_category": "",
+  "intent_score": 0.00,
+  "should_human_review": true,
+  "confidence_reasoning": "",
+  "core_problem": "",
+  "underlying_motivation": "",
+  "constraints": [],
+  "emotional_signals": [],
+  "matched_campaign_themes": [],
+  "recommended_next_step": "ignore | review | high_priority"
+}`;
+
+  const userPrompt = `Analyze this post for intent signals:
+
+Platform: ${post.platform}
+URL: ${post.url}
+Title: ${post.title}
+Content: ${post.content}
+
+Return ONLY valid JSON with your analysis.`;
+
+  try {
+    const response = await fetch('https://api.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${lovableApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.3,
+        response_format: { type: 'json_object' }
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('Lovable AI error:', await response.text());
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    
+    if (!content) {
+      console.error('No content in AI response');
+      return null;
+    }
+
+    const analysis = JSON.parse(content) as IntentAnalysis;
+    console.log(`Intent analysis for ${post.url}: score=${analysis.intent_score}, category=${analysis.intent_category}`);
+    return analysis;
+  } catch (error) {
+    console.error('Intent analysis error:', error);
+    return null;
+  }
 }
 
 serve(async (req) => {
@@ -87,7 +238,7 @@ serve(async (req) => {
       );
     }
 
-    console.log('Starting Firecrawl-powered research for campaign:', campaign.name);
+    console.log('Starting Intent Detection research for campaign:', campaign.name);
 
     // Update agent state to research phase
     await supabase
@@ -98,7 +249,7 @@ serve(async (req) => {
         last_run_at: new Date().toISOString(),
       }, { onConflict: 'campaign_id' });
 
-    const findings: any[] = [];
+    const rawFindings: any[] = [];
     
     // Get campaign channels (defaults to twitter if not set)
     const campaignChannels: string[] = Array.isArray(campaign.channels) ? campaign.channels : ['twitter'];
@@ -107,7 +258,7 @@ serve(async (req) => {
     // Generate campaign-specific search queries based on product and channels
     const productLower = campaign.product.toLowerCase();
     
-    // Build per-platform search queries (one query per platform for better results)
+    // Build per-platform search queries
     const getSiteFiltersForChannel = (channel: string): string[] => {
       switch (channel) {
         case 'twitter': return ['site:twitter.com OR site:x.com'];
@@ -115,6 +266,7 @@ serve(async (req) => {
         case 'nextdoor': return ['site:nextdoor.com'];
         case 'reddit': return ['site:reddit.com'];
         case 'facebook': return ['site:facebook.com'];
+        case 'linkedin': return ['site:linkedin.com'];
         case 'amazon': return ['site:amazon.com'];
         default: return [];
       }
@@ -147,23 +299,15 @@ serve(async (req) => {
             'best seller kids activity books',
             'top rated coloring books children',
             'best kids educational workbooks',
-            'popular preschool activity books',
-            'best seller toddler busy books',
-            'top kids craft kits',
           ];
         } else if (productLower.includes('cover letter') || productLower.includes('coverletter')) {
           return [
             'best seller resume writing books',
             'top rated job search guides',
-            'best cover letter books',
-            'career change guide books',
-            'job hunting tips books',
           ];
         } else if (productLower.includes('airport') || productLower.includes('travel') || productLower.includes('buddy')) {
           return [
             'best seller travel guides',
-            'top rated travel accessories',
-            'best airport travel tips books',
             'travel hacks guides',
           ];
         } else {
@@ -176,35 +320,19 @@ serve(async (req) => {
         return [
           'TSA wait times',
           'airport security line long',
-          'airport delay security',
           '"how early" airport flight',
-          'airport tips travel',
         ];
       } else if (productLower.includes('etsy') || productLower.includes('coloring') || productLower.includes('kids') || productLower.includes('prompted')) {
         return [
           '"keep kids busy"',
-          '"toddler bored" activities',
-          '"rainy day" kids indoor',
           '"screen free" activities kids',
-          'preschool homeschool activities',
-          '"kids crafts" printable',
-          '"quiet time" toddler activities',
-          '"what to do" kids home',
           'coloring pages kids',
-          '"summer activities" kids',
         ];
       } else if (productLower.includes('cover letter') || productLower.includes('coverletter')) {
         return [
           '"writing cover letter" help',
-          '"cover letter tips"',
           '"job application" frustrated',
-          '"applying for jobs" tired',
-          '"hate writing" cover letter',
-          '"job hunt" advice',
-          '"resume and cover letter"',
           '"how to write" cover letter',
-          '"job search" struggling',
-          '"career change" application',
         ];
       } else {
         return [campaign.product];
@@ -230,48 +358,25 @@ serve(async (req) => {
           
           for (const result of results) {
             const url = result.url || '';
+            const platform = inferPlatform(url);
             
-            // Determine platform and finding type from URL
-            let findingType = 'general_opportunity';
-            let title = '';
+            // Normalize Twitter URLs
             let normalizedUrl = url;
-            
-            if (url.includes('twitter.com') || url.includes('x.com')) {
+            if (platform === 'twitter') {
               const tweetId = extractTweetId(url);
               if (tweetId) {
                 normalizedUrl = `https://x.com/i/web/status/${tweetId}`;
-                findingType = 'twitter_opportunity';
-                title = `Tweet: ${(result.title || result.description || '').substring(0, 50)}...`;
               } else {
                 continue; // Skip Twitter URLs without valid tweet IDs
               }
-            } else if (url.includes('craigslist.org')) {
-              findingType = 'craigslist_opportunity';
-              title = `Craigslist: ${(result.title || result.description || '').substring(0, 50)}...`;
-            } else if (url.includes('nextdoor.com')) {
-              findingType = 'nextdoor_opportunity';
-              title = `Nextdoor: ${(result.title || result.description || '').substring(0, 50)}...`;
-            } else if (url.includes('reddit.com')) {
-              findingType = 'reddit_opportunity';
-              title = `Reddit: ${(result.title || result.description || '').substring(0, 50)}...`;
-            } else if (url.includes('facebook.com')) {
-              findingType = 'facebook_opportunity';
-              title = `Facebook: ${(result.title || result.description || '').substring(0, 50)}...`;
-            } else if (url.includes('amazon.com')) {
-              findingType = 'amazon_product';
-              title = `Amazon: ${(result.title || result.description || '').substring(0, 50)}...`;
-            } else {
-              title = `Post: ${(result.title || result.description || '').substring(0, 50)}...`;
             }
             
-            findings.push({
-              campaign_id,
-              title,
-              finding_type: findingType,
-              source_url: normalizedUrl,
+            rawFindings.push({
+              url: normalizedUrl,
+              title: result.title || '',
               content: result.description || result.title || '',
-              relevance_score: 8,
-              processed: false,
+              platform,
+              channel,
             });
           }
           
@@ -283,79 +388,104 @@ serve(async (req) => {
     } else {
       console.log('FIRECRAWL_API_KEY not configured, using sample data');
       
-      // Fallback sample posts for testing (includes Reddit)
+      // Fallback sample posts for testing
       const samplePosts = [
         {
-          title: "Tweet: TSA wait times at LAX are insane today...",
-          source_url: "https://x.com/i/web/status/1875961234567890123",
-          content: "TSA wait times at LAX are insane today. Been waiting 45 minutes!",
-          relevance_score: 10,
-          finding_type: 'twitter_opportunity',
+          url: "https://x.com/i/web/status/1875961234567890123",
+          title: "TSA wait times at LAX are insane today",
+          content: "TSA wait times at LAX are insane today. Been waiting 45 minutes! Anyone know a way to check wait times before heading to airport?",
+          platform: 'twitter',
+          channel: 'twitter',
         },
         {
-          title: "Tweet: Flying out of JFK tomorrow, nervous about lines...",
-          source_url: "https://x.com/i/web/status/1875962345678901234",
-          content: "Flying out of JFK tomorrow morning. How early should I arrive?",
-          relevance_score: 9,
-          finding_type: 'twitter_opportunity',
+          url: "https://reddit.com/r/Parenting/comments/sample123/best_activities_for_toddlers",
+          title: "Best activities for toddlers on rainy days?",
+          content: "Looking for screen-free activities to keep my 3 year old busy on rainy days. We've tried coloring but she gets bored quickly. Any creative ideas?",
+          platform: 'reddit',
+          channel: 'reddit',
         },
         {
-          title: "Reddit: Best activities for toddlers on rainy days?",
-          source_url: "https://reddit.com/r/Parenting/comments/sample123/best_activities_for_toddlers",
-          content: "Looking for screen-free activities to keep my 3 year old busy on rainy days. Any ideas?",
-          relevance_score: 9,
-          finding_type: 'reddit_opportunity',
+          url: "https://reddit.com/r/jobs/comments/sample456/cover_letter_frustration",
+          title: "Cover letter writing is so frustrating",
+          content: "I've applied to 50 jobs and writing unique cover letters for each is exhausting. There has to be a better way. How do you all handle this?",
+          platform: 'reddit',
+          channel: 'reddit',
         },
         {
-          title: "Reddit: Cover letter writing is so frustrating...",
-          source_url: "https://reddit.com/r/jobs/comments/sample456/cover_letter_frustration",
-          content: "I've applied to 50 jobs and writing unique cover letters for each is exhausting. There has to be a better way.",
-          relevance_score: 10,
-          finding_type: 'reddit_opportunity',
-        },
-        {
-          title: "Nextdoor: Looking for kid-friendly activities nearby",
-          source_url: "https://nextdoor.com/p/sample789/",
-          content: "New to the neighborhood! Looking for recommendations on activities to keep my kids entertained this summer.",
-          relevance_score: 9,
-          finding_type: 'nextdoor_opportunity',
-        },
-        {
-          title: "Nextdoor: Anyone know good tutors in the area?",
-          source_url: "https://nextdoor.com/p/sample012/",
-          content: "My daughter needs help with reading. Anyone have recommendations for tutors or educational resources?",
-          relevance_score: 8,
-          finding_type: 'nextdoor_opportunity',
-        },
-        {
-          title: "Amazon: Best Seller - Kids Activity Book Bundle",
-          source_url: "https://amazon.com/dp/B09SAMPLE1/",
-          content: "Top-rated kids activity book with coloring pages, puzzles, and learning activities. 4.8 stars, 2,500+ reviews.",
-          relevance_score: 9,
-          finding_type: 'amazon_product',
-        },
-        {
-          title: "Amazon: Educational Workbooks for Preschoolers",
-          source_url: "https://amazon.com/dp/B09SAMPLE2/",
-          content: "Bestselling preschool workbook series. Covers letters, numbers, and shapes. Perfect for ages 3-5.",
-          relevance_score: 8,
-          finding_type: 'amazon_product',
+          url: "https://nextdoor.com/p/sample789/",
+          title: "Looking for kid-friendly activities",
+          content: "New to the neighborhood! Looking for recommendations on activities to keep my kids entertained this summer. Any local gems?",
+          platform: 'nextdoor',
+          channel: 'nextdoor',
         },
       ];
 
-      for (const post of samplePosts) {
-        findings.push({
-          campaign_id,
-          ...post,
-          processed: false,
-        });
+      rawFindings.push(...samplePosts);
+    }
+
+    // Deduplicate by URL
+    const uniqueFindings = rawFindings.filter((finding, index, self) =>
+      index === self.findIndex(f => f.url === finding.url)
+    );
+
+    console.log(`Found ${uniqueFindings.length} unique posts, analyzing intent...`);
+
+    // Analyze intent for each finding
+    const analyzedFindings: any[] = [];
+    
+    for (const finding of uniqueFindings) {
+      const analysis = await analyzeIntent(campaign, finding);
+      
+      // Determine finding type based on platform
+      const findingTypeMap: Record<string, string> = {
+        twitter: 'twitter_opportunity',
+        reddit: 'reddit_opportunity',
+        nextdoor: 'nextdoor_opportunity',
+        facebook: 'facebook_opportunity',
+        linkedin: 'linkedin_opportunity',
+        craigslist: 'craigslist_opportunity',
+        amazon: 'amazon_product',
+      };
+      
+      const findingType = findingTypeMap[finding.platform] || 'general_opportunity';
+      
+      // Build the finding object
+      const analyzedFinding: any = {
+        campaign_id,
+        title: `${finding.platform.charAt(0).toUpperCase() + finding.platform.slice(1)}: ${finding.title.substring(0, 50)}...`,
+        finding_type: findingType,
+        source_url: finding.url,
+        content: finding.content,
+        processed: false,
+      };
+      
+      if (analysis) {
+        // Add intent analysis data
+        analyzedFinding.intent_category = analysis.intent_category;
+        analyzedFinding.intent_score = analysis.intent_score;
+        analyzedFinding.core_problem = analysis.core_problem;
+        analyzedFinding.underlying_motivation = analysis.underlying_motivation;
+        analyzedFinding.constraints = analysis.constraints;
+        analyzedFinding.emotional_signals = analysis.emotional_signals;
+        analyzedFinding.confidence_reasoning = analysis.confidence_reasoning;
+        analyzedFinding.recommended_next_step = analysis.recommended_next_step;
+        analyzedFinding.relevance_score = Math.round(analysis.intent_score * 10);
+        
+        // Only include findings with intent_score >= 0.50 (possible opportunity or better)
+        if (analysis.intent_score >= 0.50) {
+          analyzedFindings.push(analyzedFinding);
+        } else {
+          console.log(`Filtered out low-intent finding: ${finding.url} (score: ${analysis.intent_score})`);
+        }
+      } else {
+        // No AI analysis available, include with default score
+        analyzedFinding.relevance_score = 5;
+        analyzedFinding.recommended_next_step = 'review';
+        analyzedFindings.push(analyzedFinding);
       }
     }
 
-    // Deduplicate by source_url
-    const uniqueFindings = findings.filter((finding, index, self) =>
-      index === self.findIndex(f => f.source_url === finding.source_url)
-    );
+    console.log(`${analyzedFindings.length} findings passed intent filter (score >= 0.50)`);
 
     // Check for existing findings to avoid duplicates
     const { data: existingFindings } = await supabase
@@ -364,7 +494,7 @@ serve(async (req) => {
       .eq('campaign_id', campaign_id);
     
     const existingUrls = new Set((existingFindings || []).map(f => f.source_url));
-    const newFindings = uniqueFindings.filter(f => !existingUrls.has(f.source_url));
+    const newFindings = analyzedFindings.filter(f => !existingUrls.has(f.source_url));
 
     // Save new findings to database
     if (newFindings.length > 0) {
@@ -375,10 +505,10 @@ serve(async (req) => {
       if (insertError) {
         console.error('Error saving findings:', insertError);
       } else {
-        console.log(`Saved ${newFindings.length} new Twitter research findings`);
+        console.log(`Saved ${newFindings.length} new intent-analyzed research findings`);
       }
     } else {
-      console.log('No new findings to save (all duplicates or empty)');
+      console.log('No new findings to save (all duplicates or filtered out)');
     }
 
     // Update agent state
@@ -390,13 +520,25 @@ serve(async (req) => {
       })
       .eq('campaign_id', campaign_id);
 
+    // Summary stats
+    const highPriority = newFindings.filter(f => f.recommended_next_step === 'high_priority').length;
+    const reviewNeeded = newFindings.filter(f => f.recommended_next_step === 'review').length;
+
     return new Response(
       JSON.stringify({ 
         success: true, 
         findings_count: newFindings.length,
-        platform: 'twitter',
-        method: firecrawlApiKey ? 'firecrawl' : 'sample_data',
-        findings: newFindings.map(f => ({ title: f.title, url: f.source_url, score: f.relevance_score }))
+        high_priority_count: highPriority,
+        review_count: reviewNeeded,
+        method: firecrawlApiKey ? 'firecrawl+intent_analysis' : 'sample_data+intent_analysis',
+        findings: newFindings.map(f => ({ 
+          title: f.title, 
+          url: f.source_url, 
+          intent_score: f.intent_score,
+          intent_category: f.intent_category,
+          recommended_next_step: f.recommended_next_step,
+          core_problem: f.core_problem
+        }))
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
