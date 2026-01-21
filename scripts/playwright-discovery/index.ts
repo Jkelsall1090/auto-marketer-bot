@@ -83,17 +83,51 @@ function randomDelay(min: number, max: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, delay));
 }
 
-function generateSearchQueries(campaign: Campaign): string[] {
-  const queries: string[] = [];
-  const productKeywords = campaign.product.toLowerCase().split(' ');
+// Product-specific configuration for better discovery
+function getProductConfig(campaign: Campaign): { subreddits: string[]; keywords: string[] } {
+  const productLower = campaign.product.toLowerCase();
   
-  // Generate queries based on product and help phrases
-  for (const phrase of HELP_PHRASES.slice(0, 5)) {
-    queries.push(`${phrase} ${productKeywords[0]}`);
+  // Cover letter / job seeker products
+  if (productLower.includes('cover letter') || productLower.includes('resume') || productLower.includes('job')) {
+    return {
+      subreddits: ['jobs', 'careerguidance', 'resumes', 'GetEmployed', 'jobsearchhacks', 'recruitinghell', 'antiwork'],
+      keywords: ['cover letter', 'resume', 'job application', 'applying for jobs', 'job search', 'hiring manager']
+    };
   }
   
-  // Add product-specific queries
-  queries.push(campaign.product);
+  // Travel / airport products
+  if (productLower.includes('airport') || productLower.includes('travel') || productLower.includes('flight') || productLower.includes('tsa')) {
+    return {
+      subreddits: ['travel', 'TravelHacks', 'Flights', 'TravelNoPics', 'solotravel', 'digitalnomad'],
+      keywords: ['airport', 'tsa wait', 'flight delay', 'travel tips', 'flying', 'layover']
+    };
+  }
+  
+  // Marketing / business products
+  if (productLower.includes('marketing') || productLower.includes('social media') || productLower.includes('etsy')) {
+    return {
+      subreddits: ['smallbusiness', 'Entrepreneur', 'marketing', 'Etsy', 'ecommerce', 'socialmedia'],
+      keywords: ['marketing', 'promote', 'social media', 'engagement', 'grow audience', 'traffic']
+    };
+  }
+  
+  // Default fallback
+  return {
+    subreddits: ['smallbusiness', 'Entrepreneur', 'startups'],
+    keywords: campaign.product.split(' ').filter(w => w.length > 3).slice(0, 3)
+  };
+}
+
+function generateSearchQueries(campaign: Campaign): string[] {
+  const queries: string[] = [];
+  const config = getProductConfig(campaign);
+  
+  // Generate queries based on product keywords and help phrases
+  for (const keyword of config.keywords.slice(0, 3)) {
+    for (const phrase of HELP_PHRASES.slice(0, 3)) {
+      queries.push(`${phrase} ${keyword}`);
+    }
+  }
   
   return queries;
 }
@@ -111,15 +145,11 @@ async function discoverReddit(
   
   log(`Starting Reddit discovery for campaign: ${campaign.name}`);
   
-  // Target subreddits based on product
-  const subreddits = [
-    'smallbusiness',
-    'Entrepreneur',
-    'startups',
-    'marketing',
-    'socialmedia',
-    'freelance',
-  ];
+  // Get product-specific subreddits
+  const config = getProductConfig(campaign);
+  const subreddits = config.subreddits;
+  
+  log(`Using subreddits: ${subreddits.join(', ')}`);
   
   for (const subreddit of subreddits) {
     if (posts.length >= CONFIG.maxItemsPerPlatform) break;
@@ -170,18 +200,28 @@ async function discoverReddit(
         return items;
       });
       
-      // Check each post for relevance
+      // Check each post for relevance using product-specific keywords
+      const productConfig = getProductConfig(campaign);
+      
       for (const post of redditPosts) {
         if (posts.length >= CONFIG.maxItemsPerPlatform) break;
         
         const titleLower = post.title.toLowerCase();
-        const isRelevant = HELP_PHRASES.some(phrase => 
+        
+        // Check for help-seeking phrases OR product-specific keywords
+        const hasHelpPhrase = HELP_PHRASES.some(phrase => 
           titleLower.includes(phrase.toLowerCase())
-        ) || campaign.product.toLowerCase().split(' ').some(word =>
-          titleLower.includes(word)
+        );
+        const hasKeyword = productConfig.keywords.some(keyword =>
+          titleLower.includes(keyword.toLowerCase())
         );
         
-        if (isRelevant) {
+        // For job-seeker subreddits, most posts are relevant - just check for help phrases
+        // For other subreddits, require keyword match
+        const isJobSeekerSubreddit = ['jobs', 'careerguidance', 'resumes', 'GetEmployed', 'jobsearchhacks'].includes(subreddit);
+        const isRelevant = isJobSeekerSubreddit ? hasHelpPhrase || hasKeyword : hasHelpPhrase && hasKeyword;
+        
+        if (isRelevant || (isJobSeekerSubreddit && posts.length < 5)) {
           // Navigate to post to get full content
           await page.goto(post.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
           await randomDelay(CONFIG.actionPauseMin, CONFIG.actionPauseMax);
