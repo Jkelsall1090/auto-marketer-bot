@@ -266,36 +266,60 @@ export type Database = {
       research_findings: {
         Row: {
           campaign_id: string
+          confidence_reasoning: string | null
+          constraints: Json | null
           content: string | null
+          core_problem: string | null
           created_at: string | null
+          emotional_signals: Json | null
           finding_type: string
           id: string
+          intent_category: string | null
+          intent_score: number | null
           processed: boolean | null
+          recommended_next_step: string | null
           relevance_score: number | null
           source_url: string | null
           title: string
+          underlying_motivation: string | null
         }
         Insert: {
           campaign_id: string
+          confidence_reasoning?: string | null
+          constraints?: Json | null
           content?: string | null
+          core_problem?: string | null
           created_at?: string | null
+          emotional_signals?: Json | null
           finding_type: string
           id?: string
+          intent_category?: string | null
+          intent_score?: number | null
           processed?: boolean | null
+          recommended_next_step?: string | null
           relevance_score?: number | null
           source_url?: string | null
           title: string
+          underlying_motivation?: string | null
         }
         Update: {
           campaign_id?: string
+          confidence_reasoning?: string | null
+          constraints?: Json | null
           content?: string | null
+          core_problem?: string | null
           created_at?: string | null
+          emotional_signals?: Json | null
           finding_type?: string
           id?: string
+          intent_category?: string | null
+          intent_score?: number | null
           processed?: boolean | null
+          recommended_next_step?: string | null
           relevance_score?: number | null
           source_url?: string | null
           title?: string
+          underlying_motivation?: string | null
         }
         Relationships: [
           {
